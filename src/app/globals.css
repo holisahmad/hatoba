@@ -1,0 +1,126 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-obsidian: #0F1110;
+  --color-emerald: #0D281E;
+  --color-gold: #C59B47;
+  --color-crimson: #B8292F;
+  --color-alabaster: #F9F8F4;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  background-color: #FBF9F5;
+  color: #1A211D;
+}
+
+body {
+  overflow-x: hidden;
+  background-color: #FBF9F5;
+  color: #1A211D;
+}
+
+::selection {
+  background-color: #C59B47;
+  color: #FFFFFF;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #F4F0EA;
+}
+::-webkit-scrollbar-thumb {
+  background: #D8CEBE;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #C59B47;
+}
+
+.font-cinzel {
+  font-family: 'Cinzel', Georgia, serif;
+}
+
+.font-serif-title {
+  font-family: 'Playfair Display', Georgia, serif;
+}
+
+/* Decorative ornament divider like Salon Ria */
+.ornament-divider {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.ornament-divider::before,
+.ornament-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(197, 155, 71, 0.4), transparent);
+}
+
+/* Gold shimmer effect optimized for light theme */
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.gold-shimmer {
+  background: linear-gradient(90deg, #9D772A 0%, #C59B47 45%, #7A5B18 55%, #9D772A 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 5s linear infinite;
+}
+
+.gold-text-gradient {
+  background: linear-gradient(135deg, #A88133 0%, #C59B47 50%, #87621B 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Luxury card with gentle lift & clean shadow for light theme */
+.luxury-card {
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.35s ease;
+}
+.luxury-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 40px rgba(20, 26, 22, 0.07), 0 0 20px rgba(197, 155, 71, 0.12);
+  border-color: rgba(197, 155, 71, 0.6);
+}
+
+/* Decorative corner lines */
+.corner-frame {
+  position: relative;
+}
+.corner-frame::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  width: 32px;
+  height: 32px;
+  border-top: 2px solid rgba(197, 155, 71, 0.4);
+  border-left: 2px solid rgba(197, 155, 71, 0.4);
+  pointer-events: none;
+}
+.corner-frame::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  right: -8px;
+  width: 32px;
+  height: 32px;
+  border-bottom: 2px solid rgba(197, 155, 71, 0.4);
+  border-right: 2px solid rgba(197, 155, 71, 0.4);
+  pointer-events: none;
+}
+
