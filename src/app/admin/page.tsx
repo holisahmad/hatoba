@@ -788,10 +788,12 @@ export default function AdminPage() {
         {activeTab === 'pos' && (
           <PosCashierTab
             products={products}
+            recentOrders={orders}
             onOrderCreated={(newOrder) => {
               setOrders((prev) => [newOrder, ...prev])
               setSelectedOrderForPrint(newOrder)
             }}
+            onReprintOrder={(ord) => setSelectedOrderForPrint(ord)}
             showToast={showToast}
           />
         )}
@@ -897,7 +899,18 @@ export default function AdminPage() {
                             <span className="font-mono font-bold text-[#111613] text-sm block">
                               {ord.referenceCode}
                             </span>
-                            <span className="text-[11px] text-gray-500">
+                            <div className="flex items-center gap-1.5 mt-0.5 mb-1">
+                              {ord.source === 'POS' || ord.referenceCode.includes('POS') ? (
+                                <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#FAF6F0] text-[#8C6B24] border border-[#E2D6C5]">
+                                  POS KASIR
+                                </span>
+                              ) : (
+                                <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                  WEB ORDER
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[11px] text-gray-500 block">
                               {new Date(ord.createdAt).toLocaleString('id-ID', {
                                 day: 'numeric',
                                 month: 'short',

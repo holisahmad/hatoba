@@ -34,13 +34,17 @@ interface PosCartItem {
 
 interface PosCashierTabProps {
   products: AdminProduct[]
+  recentOrders?: AdminOrder[]
   onOrderCreated: (newOrder: AdminOrder) => void
+  onReprintOrder?: (order: AdminOrder) => void
   showToast: (msg: string, type: 'success' | 'error') => void
 }
 
 export default function PosCashierTab({
   products,
+  recentOrders = [],
   onOrderCreated,
+  onReprintOrder,
   showToast,
 }: PosCashierTabProps) {
   // Search product
@@ -59,7 +63,7 @@ export default function PosCashierTab({
 
   // Payment form
   const [paymentMethod, setPaymentMethod] = useState<'Tunai' | 'Transfer BCA' | 'Transfer Mandiri' | 'Tempo B2B' | 'QRIS'>('Tunai')
-  const [paymentStatus, setPaymentStatus] = useState<'LUNAS' | 'DP' | 'TEMPO'>('LUNAS')
+  const [paymentStatus, setPaymentStatus] = useState<'LUNAS' | 'DP' | 'TEMPO' | 'BELUM_BAYAR'>('LUNAS')
   const [paidAmountInput, setPaidAmountInput] = useState<string>('')
   const [discountNominal, setDiscountNominal] = useState<number>(0)
   const [loading, setLoading] = useState(false)
@@ -67,8 +71,11 @@ export default function PosCashierTab({
   // Calculations
   const rawSubtotal = cart.reduce((sum, it) => sum + it.subtotal, 0)
   const finalTotal = Math.max(0, rawSubtotal - (discountNominal || 0))
-  const paidAmount = Number(paidAmountInput) || (paymentMethod === 'Tunai' ? finalTotal : finalTotal)
+  const parsedPaid = paidAmountInput.trim() !== '' ? Number(paidAmountInput) : finalTotal
+  const paidAmount = isNaN(parsedPaid) ? finalTotal : parsedPaid
   const changeAmount = Math.max(0, paidAmount - finalTotal)
+  const shortfallAmount = Math.max(0, finalTotal - paidAmount)
+  const isUnderpaid = paidAmount < finalTotal
 
   const formatIDR = (val: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -167,6 +174,29 @@ export default function PosCashierTab({
     setLoading(true)
 
     try {
+      // Automatic detection of Payment Status based on amount paid:
+      let autoPaymentStatus = paymentStatus
+      let autoStatusNotes = ''
+      let autoOrderStatus: 'VERIFIED' | 'PENDING' = 'VERIFIED'
+
+      if (paymentMethod === 'Tempo B2B') {
+        autoPaymentStatus = 'TEMPO'
+        autoOrderStatus = 'PENDING'
+        autoStatusNotes = 'Tempo B2B (Jatuh tempo sesuai kesepakatan)'
+      } else if (isUnderpaid && paidAmount > 0) {
+        autoPaymentStatus = 'DP'
+        autoOrderStatus = 'PENDING'
+        autoStatusNotes = `DP Diterima: ${formatIDR(paidAmount)} (Sisa Tagihan: ${formatIDR(shortfallAmount)})`
+      } else if (paidAmount === 0) {
+        autoPaymentStatus = 'BELUM_BAYAR'
+        autoOrderStatus = 'PENDING'
+        autoStatusNotes = 'Belum Ada Pembayaran'
+      } else {
+        autoPaymentStatus = 'LUNAS'
+        autoOrderStatus = 'VERIFIED'
+        autoStatusNotes = `Lunas via ${paymentMethod} (${formatIDR(paidAmount)}${changeAmount > 0 ? `, Kembali: ${formatIDR(changeAmount)}` : ''})`
+      }
+
       const payload = {
         customerName: customerName.trim(),
         businessName: businessName.trim() || undefined,
@@ -183,11 +213,12 @@ export default function PosCashierTab({
         })),
         totalAmount: finalTotal,
         paymentMethod,
-        paymentStatus,
-        paidAmount: paymentMethod === 'Tunai' ? paidAmount : finalTotal,
-        changeAmount: paymentMethod === 'Tunai' ? changeAmount : 0,
-        status: paymentStatus === 'LUNAS' ? 'VERIFIED' : 'PENDING',
+        paymentStatus: autoPaymentStatus,
+        paidAmount,
+        changeAmount: changeAmount > 0 ? changeAmount : 0,
+        status: autoOrderStatus,
         source: 'POS',
+        statusNotes: autoStatusNotes,
       }
 
       const res = await fetch('/api/admin/orders', {
@@ -511,42 +542,53 @@ export default function PosCashierTab({
               </div>
             </div>
 
-            {/* Cash Paid & Change (When Tunai) */}
-            {paymentMethod === 'Tunai' && (
-              <div className="space-y-2 bg-[#FAF8F5] p-3 rounded-xl border border-[#EAE4DC]">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Uang Diterima:</span>
-                  <input
-                    type="number"
-                    placeholder={finalTotal.toString()}
-                    value={paidAmountInput}
-                    onChange={(e) => setPaidAmountInput(e.target.value)}
-                    className="w-32 px-2.5 py-1 rounded-lg bg-white border border-[#D8CEBE] text-right font-mono font-bold text-xs focus:outline-none focus:border-[#C59B47]"
-                  />
-                </div>
-
-                {/* Quick Presets */}
-                <div className="flex gap-1.5 justify-end">
-                  {[finalTotal, 50000, 100000, 200000, 500000].map((pr, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => handlePresetPay(pr)}
-                      className="px-2 py-0.5 rounded bg-white border border-gray-300 text-[10px] text-gray-600 hover:bg-gray-100 font-mono"
-                    >
-                      {pr >= 1000 ? `${pr / 1000}k` : pr}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="flex items-center justify-between font-mono font-bold text-xs pt-1 border-t border-gray-200">
-                  <span className="text-gray-600">Kembalian:</span>
-                  <span className={changeAmount > 0 ? 'text-emerald-800' : 'text-gray-800'}>
-                    {formatIDR(changeAmount)}
-                  </span>
-                </div>
+            {/* Amount Paid & Calculation (For Tunai or DP) */}
+            <div className="space-y-2 bg-[#FAF8F5] p-3 rounded-xl border border-[#EAE4DC]">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-600">Nominal Diterima / Dibayar:</span>
+                <input
+                  type="number"
+                  placeholder={finalTotal.toString()}
+                  value={paidAmountInput}
+                  onChange={(e) => setPaidAmountInput(e.target.value)}
+                  className="w-32 px-2.5 py-1 rounded-lg bg-white border border-[#D8CEBE] text-right font-mono font-bold text-xs focus:outline-none focus:border-[#C59B47]"
+                />
               </div>
-            )}
+
+              {/* Quick Presets */}
+              <div className="flex gap-1.5 justify-end">
+                {[finalTotal, 50000, 100000, 200000, 500000].map((pr, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => handlePresetPay(pr)}
+                    className="px-2 py-0.5 rounded bg-white border border-gray-300 text-[10px] text-gray-600 hover:bg-gray-100 font-mono"
+                  >
+                    {pr >= 1000 ? `${pr / 1000}k` : pr}
+                  </button>
+                ))}
+              </div>
+
+              {/* Dynamic Status: Kembalian vs Kurang Bayar (DP) */}
+              <div className="pt-1.5 border-t border-gray-200">
+                {isUnderpaid && paidAmount > 0 ? (
+                  <div className="flex items-center justify-between font-mono font-bold text-xs text-amber-800">
+                    <span>Sisa Tagihan (Status DP):</span>
+                    <span>{formatIDR(shortfallAmount)}</span>
+                  </div>
+                ) : changeAmount > 0 ? (
+                  <div className="flex items-center justify-between font-mono font-bold text-xs text-emerald-800">
+                    <span>Uang Kembalian:</span>
+                    <span>{formatIDR(changeAmount)}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between font-mono text-xs text-emerald-700 font-semibold">
+                    <span>Status:</span>
+                    <span>✓ Lunas (Uang Pas)</span>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Submit Action Button */}
@@ -569,6 +611,107 @@ export default function PosCashierTab({
             )}
           </button>
         </div>
+      </div>
+
+      {/* ================= BOTTOM: RIWAYAT TRANSAKSI POS & CETAK ULANG ================= */}
+      <div className="lg:col-span-12 mt-4 bg-white p-5 sm:p-6 rounded-3xl border border-[#E8DFD5] shadow-xs space-y-4">
+        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg bg-[#FAF6F0] border border-[#E2D6C5] flex items-center justify-center">
+              <Printer className="w-3.5 h-3.5 text-[#8C6B24]" />
+            </div>
+            <div>
+              <h3 className="font-serif-title font-bold text-base text-[#111613]">
+                Riwayat Transaksi Kasir POS (Cetak Ulang)
+              </h3>
+              <p className="text-[11px] text-[#5C6E65]">
+                Daftar transaksi kasir yang bisa dicetak ulang kapan saja (Invoice Konsumen, Struk Thermal, atau Surat Jalan DO).
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-semibold text-[#8C6B24] bg-[#FAF8F5] px-3 py-1 rounded-full border border-[#EAE4DC]">
+            {recentOrders.filter((o) => o.source === 'POS' || o.referenceCode.includes('POS')).length} Transaksi POS
+          </span>
+        </div>
+
+        {recentOrders.filter((o) => o.source === 'POS' || o.referenceCode.includes('POS')).length === 0 ? (
+          <div className="py-8 text-center text-xs text-gray-400">
+            Belum ada transaksi dari kasir POS hari ini. Transaksi baru akan muncul di sini.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-gray-100 text-gray-500 text-[11px] text-left">
+                  <th className="py-2 px-3">No. Ref</th>
+                  <th className="py-2 px-3">Waktu</th>
+                  <th className="py-2 px-3">Pelanggan / Resto</th>
+                  <th className="py-2 px-3">Daftar Menu</th>
+                  <th className="py-2 px-3">Total Tagihan</th>
+                  <th className="py-2 px-3">Metode &amp; Status</th>
+                  <th className="py-2 px-3 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {recentOrders
+                  .filter((o) => o.source === 'POS' || o.referenceCode.includes('POS'))
+                  .slice(0, 10)
+                  .map((ord) => (
+                    <tr key={ord.id} className="hover:bg-gray-50/50">
+                      <td className="py-3 px-3 font-mono font-bold text-[#8C6B24]">
+                        {ord.referenceCode}
+                      </td>
+                      <td className="py-3 px-3 text-gray-500 whitespace-nowrap">
+                        {new Date(ord.createdAt).toLocaleDateString('id-ID', {
+                          day: 'numeric',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </td>
+                      <td className="py-3 px-3">
+                        <div className="font-semibold text-[#111613]">{ord.customerName}</div>
+                        <div className="text-[10px] text-gray-500">
+                          {ord.businessName ? `${ord.businessName} · ` : ''}{ord.city}
+                        </div>
+                      </td>
+                      <td className="py-3 px-3 text-gray-600 max-w-[200px] truncate">
+                        {ord.items.map((i) => `${i.productName} (${i.quantity}x)`).join(', ')}
+                      </td>
+                      <td className="py-3 px-3 font-mono font-bold text-emerald-800 whitespace-nowrap">
+                        {formatIDR(ord.totalAmount)}
+                      </td>
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                            ord.paymentStatus === 'LUNAS' || ord.status === 'VERIFIED'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : ord.paymentStatus === 'DP'
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                              : ord.paymentStatus === 'TEMPO'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : 'bg-red-50 text-red-700 border border-red-200'
+                          }`}
+                        >
+                          {ord.paymentStatus || ord.paymentMethod || 'Tunai'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-right whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => onReprintOrder && onReprintOrder(ord)}
+                          className="px-3 py-1.5 rounded-xl bg-[#FAF8F5] hover:bg-[#F2ECE1] border border-[#D8CEBE] hover:border-[#8C6B24] text-[#8C6B24] font-semibold text-xs transition-all shadow-2xs flex items-center gap-1.5 ml-auto"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>Cetak Ulang</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )

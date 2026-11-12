@@ -442,10 +442,17 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
                       <span className="font-mono">{formatIDR(order.totalAmount)}</span>
                     </div>
 
-                    {order.paidAmount ? (
+                    {typeof order.paidAmount === 'number' ? (
                       <div className="flex justify-between text-gray-300">
                         <span>Nominal Dibayar:</span>
-                        <span className="font-mono">{formatIDR(order.paidAmount)}</span>
+                        <span className="font-mono text-emerald-400">{formatIDR(order.paidAmount)}</span>
+                      </div>
+                    ) : null}
+
+                    {typeof order.paidAmount === 'number' && order.paidAmount < order.totalAmount ? (
+                      <div className="flex justify-between text-amber-300 font-bold">
+                        <span>Sisa Tagihan (Kurang Bayar):</span>
+                        <span className="font-mono">{formatIDR(order.totalAmount - order.paidAmount)}</span>
                       </div>
                     ) : null}
 
@@ -557,16 +564,23 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
                   <span>Metode Bayar:</span>
                   <span>{order.paymentMethod || 'Tunai'}</span>
                 </div>
-                {order.paidAmount ? (
+                {typeof order.paidAmount === 'number' ? (
                   <>
                     <div className="flex justify-between text-[11px] text-gray-600">
                       <span>Bayar (Diterima):</span>
                       <span>{formatIDR(order.paidAmount)}</span>
                     </div>
-                    <div className="flex justify-between text-[11px] text-gray-600">
-                      <span>Kembalian:</span>
-                      <span>{formatIDR(order.changeAmount || 0)}</span>
-                    </div>
+                    {order.paidAmount < order.totalAmount ? (
+                      <div className="flex justify-between text-[11px] font-bold text-amber-800">
+                        <span>Sisa Tagihan (DP):</span>
+                        <span>{formatIDR(order.totalAmount - order.paidAmount)}</span>
+                      </div>
+                    ) : order.changeAmount ? (
+                      <div className="flex justify-between text-[11px] text-gray-600">
+                        <span>Kembalian:</span>
+                        <span>{formatIDR(order.changeAmount)}</span>
+                      </div>
+                    ) : null}
                   </>
                 ) : null}
               </div>
