@@ -1,7 +1,5 @@
-import fs from 'fs/promises'
-import path from 'path'
-import os from 'os'
 import { CATALOG_PRODUCTS, ProductItem } from './catalog-data'
+import { supabaseAdmin as supabase } from './supabase'
 
 export interface OrderItem {
   productName: string
@@ -51,39 +49,17 @@ export interface ActivityLog {
   metadata?: Record<string, unknown>
 }
 
-// In Vercel serverless environment, /var/task is read-only (EROFS).
-// Use os.tmpdir() (/tmp/hatoba-data) on Vercel or process.cwd()/data in local development.
-const DATA_DIR = process.env.VERCEL
-  ? path.join(os.tmpdir(), 'hatoba-data')
-  : path.join(process.cwd(), 'data')
-
-const ORDERS_FILE = path.join(DATA_DIR, 'orders.json')
-const PRODUCTS_FILE = path.join(DATA_DIR, 'products.json')
-const LOGS_FILE = path.join(DATA_DIR, 'activity_logs.json')
-
-// In-memory fallback caches for serverless lifecycle
+// In-memory fallback caches
 let cachedProducts: AdminProduct[] | null = null
 let cachedOrders: AdminOrder[] | null = null
 let cachedLogs: ActivityLog[] | null = null
 
-// Helper to safely write to filesystem without crashing on read-only environments
-async function safeWriteFile(filePath: string, content: string): Promise<boolean> {
-  try {
-    await fs.mkdir(DATA_DIR, { recursive: true })
-    await fs.writeFile(filePath, content, 'utf-8')
-    return true
-  } catch (err) {
-    console.warn(`[admin-store] Filesystem write skipped (${filePath}):`, (err as Error).message)
-    return false
-  }
-}
-
-// Sample Initial Orders
+// Initial Fallback Orders
 const INITIAL_ORDERS: AdminOrder[] = [
   {
     id: 'ord-init-01',
     referenceCode: 'ORD-2611-B892',
-    createdAt: new Date(Date.now() - 3600000 * 4).toISOString(), // 4 hours ago
+    createdAt: new Date(Date.now() - 3600000 * 4).toISOString(),
     customerName: 'Bpk. Hendra Gunawan',
     businessName: 'Warung Bu Kris Express Denpasar',
     businessType: 'Restoran / Rumah Makan',
@@ -116,7 +92,7 @@ const INITIAL_ORDERS: AdminOrder[] = [
   {
     id: 'ord-init-02',
     referenceCode: 'ORD-2611-Y415',
-    createdAt: new Date(Date.now() - 3600000 * 2).toISOString(), // 2 hours ago
+    createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
     customerName: 'Ibu Ratna Dewi',
     businessName: 'Katering Sedap Malioboro',
     businessType: 'Katering Acara',
@@ -137,101 +113,67 @@ const INITIAL_ORDERS: AdminOrder[] = [
     totalAmount: 1300000,
     status: 'PENDING',
   },
-  {
-    id: 'ord-init-03',
-    referenceCode: 'ORD-2611-M108',
-    createdAt: new Date(Date.now() - 3600000 * 24).toISOString(), // 1 day ago
-    customerName: 'Bpk. Agus Santoso',
-    businessName: 'Depot Soto Babat Solo',
-    businessType: 'Rumah Makan',
-    phone: '085711223344',
-    hubArea: 'Luar Area Layanan',
-    city: 'Surakarta',
-    marketingName: 'Direct Web',
-    notes: 'Pengiriman via kargo reguler bus malam.',
-    items: [
-      {
-        productName: 'Iso Sapi Frozen',
-        variantName: 'Kemasan Ritel (Pouch Vacuum)',
-        quantity: 5,
-        unitPrice: 43500,
-        subtotal: 217500,
-      },
-    ],
-    totalAmount: 217500,
-    status: 'REJECTED',
-    rejectedAt: new Date(Date.now() - 3600000 * 20).toISOString(),
-    statusNotes: 'Luar jangkauan cold chain tanpa sewa styrofoam box berpendingin.',
-  },
 ]
 
-// Initial Activity Logs
-const INITIAL_LOGS: ActivityLog[] = [
-  {
-    id: 'log-init-01',
-    timestamp: new Date(Date.now() - 3600000 * 3).toISOString(),
-    action: 'ORDER_VERIFIED',
-    title: 'Order Diverifikasi',
-    description: 'Order ORD-2611-B892 (Bpk. Hendra Gunawan - Rp 865.000) diverifikasi oleh Admin Pusat.',
-    adminUser: 'Admin Pusat',
-  },
-  {
-    id: 'log-init-02',
-    timestamp: new Date(Date.now() - 3600000 * 20).toISOString(),
-    action: 'ORDER_REJECTED',
-    title: 'Order Ditolak',
-    description: 'Order ORD-2611-M108 (Bpk. Agus Santoso) ditolak: di luar jangkauan cold chain aktif.',
-    adminUser: 'Admin Pusat',
-  },
-  {
-    id: 'log-init-03',
-    timestamp: new Date(Date.now() - 3600000 * 48).toISOString(),
-    action: 'MENU_UPDATED',
-    title: 'Katalog Diperbarui',
-    description: 'Penyesuaian spesifikasi porsi dan kemasan vacuum seal 5 produk utama.',
-    adminUser: 'Admin Pusat',
-  },
-]
-
-async function ensureDataDirectory() {
-  try {
-    await fs.mkdir(DATA_DIR, { recursive: true })
-  } catch {
-    // Safely ignore on read-only environments
-  }
-}
-
-// ==================== ORDERS STORE ====================
+// ==================== ORDERS STORE (SUPABASE + CACHE) ====================
 export async function getAdminOrders(): Promise<AdminOrder[]> {
-  if (cachedOrders) {
-    return [...cachedOrders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-  }
-
   try {
-    const raw = await fs.readFile(ORDERS_FILE, 'utf-8')
-    const list: AdminOrder[] = JSON.parse(raw)
-    cachedOrders = list
-    return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-  } catch {
-    cachedOrders = [...INITIAL_ORDERS]
-    await safeWriteFile(ORDERS_FILE, JSON.stringify(INITIAL_ORDERS, null, 2))
-    return cachedOrders
+    const { data, error } = await supabase
+      .from('hatoba_orders')
+      .select('data')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.warn('[admin-store] Supabase getAdminOrders error, using cache:', error.message)
+      return cachedOrders || INITIAL_ORDERS
+    }
+
+    if (data && data.length > 0) {
+      const orders = data.map((row) => row.data as AdminOrder)
+      cachedOrders = orders
+      return orders
+    }
+
+    // If empty in DB, return initial orders
+    return cachedOrders || INITIAL_ORDERS
+  } catch (err) {
+    console.warn('[admin-store] getAdminOrders fallback:', (err as Error).message)
+    return cachedOrders || INITIAL_ORDERS
   }
 }
 
-export async function addAdminOrder(order: Omit<AdminOrder, 'id' | 'createdAt' | 'status'> & Partial<Pick<AdminOrder, 'status'>>): Promise<AdminOrder> {
-  const orders = await getAdminOrders()
+export async function addAdminOrder(
+  order: Omit<AdminOrder, 'id' | 'createdAt' | 'status'> & Partial<Pick<AdminOrder, 'status'>>
+): Promise<AdminOrder> {
   const newOrder: AdminOrder = {
     ...order,
     id: `ord-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     createdAt: new Date().toISOString(),
     status: order.status || 'PENDING',
   }
-  orders.unshift(newOrder)
-  cachedOrders = orders
-  await safeWriteFile(ORDERS_FILE, JSON.stringify(orders, null, 2))
 
-  // Automatically record activity log
+  try {
+    const { error } = await supabase.from('hatoba_orders').insert({
+      id: newOrder.id,
+      reference_code: newOrder.referenceCode,
+      status: newOrder.status,
+      data: newOrder,
+      created_at: newOrder.createdAt,
+    })
+
+    if (error) {
+      console.warn('[admin-store] Supabase insert order error:', error.message)
+    }
+  } catch (err) {
+    console.warn('[admin-store] Supabase insert order exception:', (err as Error).message)
+  }
+
+  // Update in-memory cache
+  if (cachedOrders) {
+    cachedOrders.unshift(newOrder)
+  }
+
+  // Record activity log
   await recordActivityLog({
     action: 'ORDER_RECEIVED',
     title: 'Order Baru Masuk',
@@ -262,13 +204,26 @@ export async function updateAdminOrderStatus(
     order.rejectedAt = new Date().toISOString()
   }
 
-  cachedOrders = orders
-  await safeWriteFile(ORDERS_FILE, JSON.stringify(orders, null, 2))
+  try {
+    const { error } = await supabase
+      .from('hatoba_orders')
+      .update({
+        status: newStatus,
+        data: order,
+      })
+      .eq('id', order.id)
+
+    if (error) {
+      console.warn('[admin-store] Supabase update order status error:', error.message)
+    }
+  } catch (err) {
+    console.warn('[admin-store] Supabase update order status exception:', (err as Error).message)
+  }
 
   // Log action
   const actionType = newStatus === 'VERIFIED' ? 'ORDER_VERIFIED' : newStatus === 'REJECTED' ? 'ORDER_REJECTED' : 'ORDER_PENDING'
   const actionLabel = newStatus === 'VERIFIED' ? 'Diverifikasi / Diterima' : newStatus === 'REJECTED' ? 'Ditolak' : 'Dikembalikan ke Pending'
-  
+
   await recordActivityLog({
     action: actionType,
     title: `Order ${actionLabel}`,
@@ -280,61 +235,107 @@ export async function updateAdminOrderStatus(
   return order
 }
 
-// ==================== PRODUCTS / MENU STORE ====================
+// ==================== PRODUCTS / MENU STORE (SUPABASE + CACHE) ====================
 export async function getAdminProducts(): Promise<AdminProduct[]> {
-  if (cachedProducts) {
-    return cachedProducts
-  }
-
   try {
-    const raw = await fs.readFile(PRODUCTS_FILE, 'utf-8')
-    const list: AdminProduct[] = JSON.parse(raw)
-    cachedProducts = list
-    return list
-  } catch {
-    // Initialize from CATALOG_PRODUCTS
-    const initial: AdminProduct[] = CATALOG_PRODUCTS.map((p) => ({
-      ...p,
-      badge: p.id === 'babat-sapi' ? 'Terlaris' : p.id === 'iga-sapi' ? 'Premium Cut' : 'Vacuum Sealed',
-      isAvailable: true,
-      updatedAt: new Date().toISOString(),
-    }))
-    cachedProducts = initial
-    await safeWriteFile(PRODUCTS_FILE, JSON.stringify(initial, null, 2))
-    return initial
+    const { data, error } = await supabase
+      .from('hatoba_products')
+      .select('data')
+      .order('updated_at', { ascending: false })
+
+    if (error) {
+      console.warn('[admin-store] Supabase getAdminProducts error, using fallback:', error.message)
+      return getFallbackProducts()
+    }
+
+    if (data && data.length > 0) {
+      const products = data.map((row) => row.data as AdminProduct)
+      cachedProducts = products
+      return products
+    }
+
+    return getFallbackProducts()
+  } catch (err) {
+    console.warn('[admin-store] getAdminProducts fallback:', (err as Error).message)
+    return getFallbackProducts()
   }
+}
+
+function getFallbackProducts(): AdminProduct[] {
+  if (cachedProducts) return cachedProducts
+  const initial: AdminProduct[] = CATALOG_PRODUCTS.map((p) => ({
+    ...p,
+    badge: p.id === 'babat-sapi' ? 'Terlaris' : p.id === 'iga-sapi' ? 'Premium Cut' : 'Vacuum Sealed',
+    isAvailable: true,
+    updatedAt: new Date().toISOString(),
+  }))
+  cachedProducts = initial
+  return initial
 }
 
 export async function saveAdminProduct(productData: Partial<AdminProduct> & { name: string }): Promise<AdminProduct> {
   const products = await getAdminProducts()
-  
+  let finalProduct: AdminProduct
+  let isEdit = false
+
   if (productData.id) {
-    // Edit existing product
     const index = products.findIndex((p) => p.id === productData.id)
     if (index !== -1) {
-      const updated: AdminProduct = {
+      isEdit = true
+      finalProduct = {
         ...products[index],
         ...productData,
         updatedAt: new Date().toISOString(),
       }
-      products[index] = updated
-      cachedProducts = products
-      await safeWriteFile(PRODUCTS_FILE, JSON.stringify(products, null, 2))
-
-      await recordActivityLog({
-        action: 'MENU_UPDATED',
-        title: 'Menu Diperbarui',
-        description: `Menu "${updated.name}" berhasil diperbarui oleh admin.`,
-        adminUser: 'Admin',
-        metadata: { id: updated.id, name: updated.name },
-      })
-      return updated
+      products[index] = finalProduct
+    } else {
+      finalProduct = buildNewProduct(productData)
+      products.push(finalProduct)
     }
+  } else {
+    finalProduct = buildNewProduct(productData)
+    products.push(finalProduct)
   }
 
-  // Create new product
-  const slug = (productData.slug || productData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')) + '-' + Date.now().toString(36)
-  const newProduct: AdminProduct = {
+  // Persist to Supabase
+  try {
+    const { error } = await supabase.from('hatoba_products').upsert({
+      id: finalProduct.id,
+      data: finalProduct,
+      updated_at: finalProduct.updatedAt,
+    })
+
+    if (error) {
+      console.warn('[admin-store] Supabase upsert product error:', error.message)
+    }
+  } catch (err) {
+    console.warn('[admin-store] Supabase upsert product exception:', (err as Error).message)
+  }
+
+  cachedProducts = products
+
+  await recordActivityLog({
+    action: isEdit ? 'MENU_UPDATED' : 'MENU_CREATED',
+    title: isEdit ? 'Menu Diperbarui' : 'Menu Baru Ditambahkan',
+    description: `Menu "${finalProduct.name}" berhasil ${isEdit ? 'diperbarui' : 'didaftarkan'} oleh admin.`,
+    adminUser: 'Admin',
+    metadata: { id: finalProduct.id, name: finalProduct.name },
+  })
+
+  return finalProduct
+}
+
+function buildNewProduct(productData: Partial<AdminProduct> & { name: string }): AdminProduct {
+  const slug =
+    (productData.slug ||
+      productData.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '')) +
+    '-' +
+    Date.now().toString(36)
+
+  return {
     id: productData.id || `menu-${Date.now()}`,
     slug,
     name: productData.name,
@@ -351,34 +352,23 @@ export async function saveAdminProduct(productData: Partial<AdminProduct> & { na
     discountPercent: productData.discountPercent || 0,
     originalPrice: productData.originalPrice || 0,
     isAvailable: productData.isAvailable ?? true,
-    variants: productData.variants && productData.variants.length > 0 ? productData.variants : [
-      {
-        id: `var-${Date.now()}-1`,
-        name: 'Kemasan Ritel Vacuum',
-        packType: 'retail',
-        weight: '250 gr',
-        portion: 'Porsi 2-3 orang',
-        minQty: 1,
-        price: productData.variants?.[0]?.price || 45000,
-        isAvailable: true,
-      },
-    ],
+    variants:
+      productData.variants && productData.variants.length > 0
+        ? productData.variants
+        : [
+            {
+              id: `var-${Date.now()}-1`,
+              name: 'Kemasan Ritel Vacuum',
+              packType: 'retail',
+              weight: '250 gr',
+              portion: 'Porsi 2-3 orang',
+              minQty: 1,
+              price: productData.variants?.[0]?.price || 45000,
+              isAvailable: true,
+            },
+          ],
     updatedAt: new Date().toISOString(),
   }
-
-  products.push(newProduct)
-  cachedProducts = products
-  await safeWriteFile(PRODUCTS_FILE, JSON.stringify(products, null, 2))
-
-  await recordActivityLog({
-    action: 'MENU_CREATED',
-    title: 'Menu Baru Ditambahkan',
-    description: `Menu baru "${newProduct.name}" berhasil didaftarkan ke katalog sistem.`,
-    adminUser: 'Admin',
-    metadata: { id: newProduct.id, name: newProduct.name },
-  })
-
-  return newProduct
 }
 
 export async function deleteAdminProduct(productId: string): Promise<boolean> {
@@ -386,9 +376,17 @@ export async function deleteAdminProduct(productId: string): Promise<boolean> {
   const target = products.find((p) => p.id === productId)
   if (!target) return false
 
+  try {
+    const { error } = await supabase.from('hatoba_products').delete().eq('id', productId)
+    if (error) {
+      console.warn('[admin-store] Supabase delete product error:', error.message)
+    }
+  } catch (err) {
+    console.warn('[admin-store] Supabase delete product exception:', (err as Error).message)
+  }
+
   const filtered = products.filter((p) => p.id !== productId)
   cachedProducts = filtered
-  await safeWriteFile(PRODUCTS_FILE, JSON.stringify(filtered, null, 2))
 
   await recordActivityLog({
     action: 'MENU_DELETED',
@@ -401,49 +399,57 @@ export async function deleteAdminProduct(productId: string): Promise<boolean> {
   return true
 }
 
-// ==================== ACTIVITY LOGS (MAX 30 DAYS RETENTION) ====================
+// ==================== ACTIVITY LOGS STORE (SUPABASE + CACHE) ====================
 export async function getActivityLogs(): Promise<ActivityLog[]> {
-  if (cachedLogs) {
-    return [...cachedLogs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-  }
-
   try {
-    const raw = await fs.readFile(LOGS_FILE, 'utf-8')
-    const list: ActivityLog[] = JSON.parse(raw)
-    
-    // Auto-prune logs older than 30 days
-    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
-    const validLogs = list.filter((l) => new Date(l.timestamp).getTime() >= thirtyDaysAgo)
+    const { data, error } = await supabase
+      .from('hatoba_logs')
+      .select('data')
+      .order('timestamp', { ascending: false })
+      .limit(100)
 
-    if (validLogs.length !== list.length) {
-      await safeWriteFile(LOGS_FILE, JSON.stringify(validLogs, null, 2))
+    if (error) {
+      console.warn('[admin-store] Supabase get logs error:', error.message)
+      return cachedLogs || []
     }
 
-    cachedLogs = validLogs
-    return validLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-  } catch {
-    cachedLogs = [...INITIAL_LOGS]
-    await safeWriteFile(LOGS_FILE, JSON.stringify(INITIAL_LOGS, null, 2))
-    return cachedLogs
+    if (data && data.length > 0) {
+      const logs = data.map((r) => r.data as ActivityLog)
+      cachedLogs = logs
+      return logs
+    }
+
+    return cachedLogs || []
+  } catch (err) {
+    console.warn('[admin-store] get logs exception:', (err as Error).message)
+    return cachedLogs || []
   }
 }
 
 export async function recordActivityLog(logData: Omit<ActivityLog, 'id' | 'timestamp'>): Promise<ActivityLog> {
-  const logs = await getActivityLogs()
   const newLog: ActivityLog = {
     ...logData,
     id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     timestamp: new Date().toISOString(),
   }
 
-  logs.unshift(newLog)
+  try {
+    const { error } = await supabase.from('hatoba_logs').insert({
+      id: newLog.id,
+      timestamp: newLog.timestamp,
+      data: newLog,
+    })
 
-  // Keep max 30 days
-  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
-  const pruned = logs.filter((l) => new Date(l.timestamp).getTime() >= thirtyDaysAgo)
+    if (error) {
+      console.warn('[admin-store] Supabase insert log error:', error.message)
+    }
+  } catch (err) {
+    console.warn('[admin-store] Supabase insert log exception:', (err as Error).message)
+  }
 
-  cachedLogs = pruned
-  await safeWriteFile(LOGS_FILE, JSON.stringify(pruned, null, 2))
+  if (cachedLogs) {
+    cachedLogs.unshift(newLog)
+  }
+
   return newLog
 }
-
