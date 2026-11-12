@@ -1227,8 +1227,8 @@ export default function AdminPage() {
 
       {/* ======================= MODAL: REJECT / NOTE PROMPT ======================= */}
       {updatingOrderId && pendingStatusAction && (
-        <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-white rounded-3xl p-6 border border-[#E8DFD5] shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm overflow-y-auto p-4 flex justify-center items-start sm:items-center">
+          <div className="relative max-w-md w-full bg-white rounded-3xl p-6 sm:p-7 border border-[#E8DFD5] shadow-2xl my-6 sm:my-auto space-y-4">
             <h4 className="font-serif-title text-lg font-bold text-[#111613]">
               {pendingStatusAction === 'REJECTED' ? 'Tolak Pesanan Ini?' : 'Alasan Perubahan Status'}
             </h4>
@@ -1272,24 +1272,31 @@ export default function AdminPage() {
 
       {/* ======================= MODAL: CRUD MENU (ADD / EDIT) ======================= */}
       {isMenuModalOpen && editingProduct && (
-        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="max-w-2xl w-full bg-white rounded-3xl p-6 sm:p-8 border border-[#E8DFD5] shadow-2xl my-8 space-y-6">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+        <div className="fixed inset-0 z-[70] bg-black/65 backdrop-blur-sm overflow-y-auto p-3 sm:p-6 flex justify-center items-start">
+          <form
+            onSubmit={handleSaveProduct}
+            className="relative w-full max-w-2xl bg-white rounded-3xl border border-[#E8DFD5] shadow-2xl my-4 sm:my-8 flex flex-col max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-4rem)] overflow-hidden"
+          >
+            {/* Header Modal Tetap di Atas */}
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4 sm:px-8 sm:py-5 flex-shrink-0 bg-white">
               <div>
                 <h3 className="font-serif-title text-xl font-bold text-[#111613]">
                   {editingProduct.id ? 'Edit Menu Produk' : 'Tambah Menu Baru'}
                 </h3>
-                <p className="text-xs text-gray-500">Katalog B2B & Ritel HATOBA Frozen Food</p>
+                <p className="text-xs text-gray-500">Katalog B2B &amp; Ritel HATOBA Frozen Food</p>
               </div>
               <button
+                type="button"
                 onClick={() => setIsMenuModalOpen(false)}
-                className="p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-900"
+                className="w-9 h-9 rounded-full bg-[#FAF8F5] border border-[#EAE4DC] hover:bg-gray-100 flex items-center justify-center text-gray-500 hover:text-black font-bold text-sm transition-colors"
+                title="Tutup Modal"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleSaveProduct} className="space-y-4">
+            {/* Scrollable Form Body */}
+            <div className="flex-1 overflow-y-auto px-6 py-5 sm:px-8 sm:py-6 space-y-4">
               {/* Nama + Kategori */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -1642,32 +1649,33 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* Submit Button */}
-              <div className="pt-4 border-t border-gray-100 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsMenuModalOpen(false)}
-                  className="px-5 py-2.5 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={productFormLoading}
-                  className="px-6 py-2.5 rounded-xl bg-crimson hover:bg-crimson-hover text-white text-xs font-bold transition-all shadow-md shadow-crimson/25 disabled:opacity-50"
-                >
-                  {productFormLoading ? 'Menyimpan...' : 'Simpan Perubahan Menu'}
-                </button>
-              </div>
-            </form>
-          </div>
+            </div>
+
+            {/* Footer Modal Tetap di Bawah */}
+            <div className="px-6 py-4 sm:px-8 sm:py-4 border-t border-gray-100 flex items-center justify-end gap-3 flex-shrink-0 bg-[#FAF8F5]">
+              <button
+                type="button"
+                onClick={() => setIsMenuModalOpen(false)}
+                className="px-5 py-2.5 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-200/70 transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                disabled={productFormLoading}
+                className="px-6 py-2.5 rounded-xl bg-crimson hover:bg-crimson-hover text-white text-xs font-bold transition-all shadow-md shadow-crimson/25 disabled:opacity-50"
+              >
+                {productFormLoading ? 'Menyimpan...' : 'Simpan Perubahan Menu'}
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
       {/* ======================= MODAL / PRINT SHEET: CETAK NOTA ======================= */}
       {selectedOrderForPrint && (
-        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="max-w-lg w-full bg-white rounded-3xl p-6 sm:p-8 border border-gray-200 shadow-2xl space-y-6 text-[#111613]">
+        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center">
+          <div className="relative max-w-lg w-full bg-white rounded-3xl p-6 sm:p-8 border border-gray-200 shadow-2xl my-4 sm:my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-4rem)] overflow-y-auto space-y-6 text-[#111613]">
             {/* Header Nota */}
             <div className="flex items-center justify-between border-b border-gray-200 pb-4">
               <div className="flex items-center gap-2">
