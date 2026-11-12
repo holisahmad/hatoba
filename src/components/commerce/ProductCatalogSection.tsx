@@ -22,9 +22,11 @@ export default function ProductCatalogSection() {
   }, [])
 
   const filteredProducts = products.filter((prod) => {
-    if (filter === 'JEROAN') return prod.id === 'babat-sapi' || prod.id === 'iso-sapi' || prod.id === 'paru-sapi'
-    if (filter === 'IGA') return prod.id === 'iga-sapi'
-    if (filter === 'MIX') return prod.id === 'mix-4-lauk'
+    const cat = (prod.category || '').toLowerCase()
+    const id = (prod.id || '').toLowerCase()
+    if (filter === 'JEROAN') return cat.includes('jeroan') || id.includes('babat') || id.includes('iso') || id.includes('paru')
+    if (filter === 'IGA') return cat.includes('daging') || cat.includes('iga') || id.includes('iga')
+    if (filter === 'MIX') return cat.includes('mix') || cat.includes('kombinasi') || id.includes('mix')
     return true
   })
 

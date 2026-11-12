@@ -1025,6 +1025,14 @@ export default function AdminPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {products.map((prod) => {
                 const lowestPrice = Math.min(...prod.variants.map((v) => v.price))
+                const maxDiscount = Math.max(
+                  prod.discountPercent || 0,
+                  ...prod.variants.map((v) => v.discountPercent || 0)
+                )
+                const highestOriginalPrice = Math.max(
+                  prod.originalPrice || 0,
+                  ...prod.variants.map((v) => v.originalPrice || 0)
+                )
                 return (
                   <div
                     key={prod.id}
@@ -1045,9 +1053,9 @@ export default function AdminPage() {
                               {prod.badge}
                             </span>
                           )}
-                          {prod.discountPercent && prod.discountPercent > 0 ? (
+                          {maxDiscount > 0 ? (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-crimson text-white">
-                              -{prod.discountPercent}%
+                              -{maxDiscount}%
                             </span>
                           ) : null}
                         </div>
@@ -1084,9 +1092,9 @@ export default function AdminPage() {
                               <span className="font-mono font-bold text-sm text-[#111613]">
                                 {formatIDR(lowestPrice)}
                               </span>
-                              {prod.originalPrice && prod.originalPrice > lowestPrice && (
+                              {highestOriginalPrice > lowestPrice && (
                                 <span className="text-xs text-gray-400 line-through font-mono">
-                                  {formatIDR(prod.originalPrice)}
+                                  {formatIDR(highestOriginalPrice)}
                                 </span>
                               )}
                             </div>

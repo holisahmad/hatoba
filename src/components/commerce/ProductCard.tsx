@@ -59,10 +59,27 @@ export default function ProductCard({ product }: ProductCardProps) {
           />
 
           {/* Top Badges */}
-          <div className="absolute top-3.5 left-3.5 flex items-center gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider bg-black/80 text-gold px-3 py-1 rounded-full border border-gold/40 backdrop-blur-md">
-              Vacuum Sealed
-            </span>
+          <div className="flex flex-wrap items-center gap-1.5 absolute top-3.5 left-3.5 z-10">
+            {((product as { badge?: string }).badge) ? (
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-black/85 text-gold px-3 py-1 rounded-full border border-gold/40 backdrop-blur-md">
+                {(product as { badge?: string }).badge}
+              </span>
+            ) : (
+              <span className="text-[10px] font-bold uppercase tracking-wider bg-black/80 text-gold px-3 py-1 rounded-full border border-gold/40 backdrop-blur-md">
+                Vacuum Sealed
+              </span>
+            )}
+
+            {selectedVariant.discountPercent && selectedVariant.discountPercent > 0 ? (
+              <span className="text-[10px] font-bold bg-crimson text-white px-2.5 py-1 rounded-full shadow-md">
+                -{selectedVariant.discountPercent}%
+              </span>
+            ) : selectedVariant.originalPrice && selectedVariant.originalPrice > selectedVariant.price ? (
+              <span className="text-[10px] font-bold bg-crimson text-white px-2.5 py-1 rounded-full shadow-md">
+                PROMO
+              </span>
+            ) : null}
+
             <span className="text-[10px] font-bold bg-[#0D281E]/90 text-white px-2.5 py-1 rounded-full backdrop-blur-md flex items-center gap-1">
               <Snowflake className="w-3 h-3 text-emerald-accent" />
               -18°C
@@ -120,25 +137,38 @@ export default function ProductCard({ product }: ProductCardProps) {
             <div className="grid grid-cols-2 gap-2">
               {product.variants.map((v) => {
                 const isSelected = selectedVariant.id === v.id
+                const hasDiscount = (v.discountPercent && v.discountPercent > 0) || (v.originalPrice && v.originalPrice > v.price)
                 return (
                   <button
                     key={v.id}
                     type="button"
                     suppressHydrationWarning
                     onClick={() => handleVariantChange(v)}
-                    className={`p-3 rounded-xl text-left border transition-all ${
+                    className={`p-3 rounded-xl text-left border transition-all relative ${
                       isSelected
                         ? 'border-gold bg-[#FAF4E8] shadow-sm'
                         : 'border-gray-200 hover:border-gray-300 bg-gray-50/60'
                     }`}
                   >
-                    <span className="block text-xs font-bold text-[#141615]">
-                      {v.packType === 'retail' ? 'Ritel (1 Pk)' : 'Partai (B2B)'}
+                    {hasDiscount && (
+                      <span className="absolute -top-2 right-2 bg-crimson text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
+                        {v.discountPercent ? `-${v.discountPercent}%` : 'PROMO'}
+                      </span>
+                    )}
+                    <span className="block text-xs font-bold text-[#141615] truncate">
+                      {v.name || (v.packType === 'retail' ? 'Ritel (1 Pk)' : 'Partai (B2B)')}
                     </span>
                     <span className="block text-[11px] text-gray-500">{v.weight}</span>
-                    <span className="block text-xs font-bold text-[#0D281E] font-mono mt-1">
-                      {formatRupiah(v.price)}
-                    </span>
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      <span className="text-xs font-bold text-[#0D281E] font-mono">
+                        {formatRupiah(v.price)}
+                      </span>
+                      {v.originalPrice && v.originalPrice > v.price && (
+                        <span className="text-[10px] text-gray-400 line-through font-mono">
+                          {formatRupiah(v.originalPrice)}
+                        </span>
+                      )}
+                    </div>
                   </button>
                 )
               })}
@@ -151,6 +181,12 @@ export default function ProductCard({ product }: ProductCardProps) {
               <span className="font-light">Estimasi Porsi:</span>
               <strong className="text-[#141615] font-serif-title">{selectedVariant.portion}</strong>
             </div>
+            {selectedVariant.originalPrice && selectedVariant.originalPrice > selectedVariant.price && (
+              <div className="flex justify-between text-[#B8292F] font-semibold text-[11px]">
+                <span>Hemat:</span>
+                <strong>{formatRupiah(selectedVariant.originalPrice - selectedVariant.price)} / pack</strong>
+              </div>
+            )}
             {selectedVariant.minQty > 1 && (
               <div className="flex justify-between text-[#B8292F] font-medium text-[11px]">
                 <span>Ketentuan Order:</span>
