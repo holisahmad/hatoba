@@ -62,6 +62,13 @@ export default function AdminPage() {
   const [statusNoteInput, setStatusNoteInput] = useState('')
   const [pendingStatusAction, setPendingStatusAction] = useState<OrderStatus | null>(null)
 
+  // Toast notification
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 3500)
+  }
+
   // Check auth on mount
   useEffect(() => {
     checkSession()
@@ -183,8 +190,9 @@ export default function AdminPage() {
         setIsMenuModalOpen(false)
         setEditingProduct(null)
         fetchAllData()
+        showToast(`Menu "${data.product.name}" berhasil disimpan.`)
       } else {
-        alert(data.error || 'Gagal menyimpan menu.')
+        showToast(data.error || 'Gagal menyimpan menu.', 'error')
       }
     } catch {
       alert('Terjadi kesalahan koneksi.')
@@ -1237,6 +1245,7 @@ export default function AdminPage() {
             </div>
 
             <form onSubmit={handleSaveProduct} className="space-y-4">
+              {/* Nama + Kategori */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-[#48564F] mb-1">
@@ -1251,7 +1260,6 @@ export default function AdminPage() {
                     className="w-full px-3 py-2 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs text-[#111613] focus:outline-none focus:border-[#C59B47]"
                   />
                 </div>
-
                 <div>
                   <label className="block text-xs font-semibold text-[#48564F] mb-1">Kategori:</label>
                   <select
@@ -1261,16 +1269,17 @@ export default function AdminPage() {
                   >
                     <option value="Jeroan Sapi Higienis">Jeroan Sapi Higienis</option>
                     <option value="Daging Sapi Pilihan">Daging Sapi Pilihan</option>
+                    <option value="Daging & Tulang Pilihan">Daging &amp; Tulang Pilihan</option>
+                    <option value="Kombinasi Aneka Jeroan & Daging">Kombinasi Aneka Jeroan &amp; Daging</option>
                     <option value="Paket Mix Komplit">Paket Mix Komplit</option>
-                    <option value="Karkas & Potongan Khusus">Karkas & Potongan Khusus</option>
+                    <option value="Karkas & Potongan Khusus">Karkas &amp; Potongan Khusus</option>
                   </select>
                 </div>
               </div>
 
+              {/* Deskripsi */}
               <div>
-                <label className="block text-xs font-semibold text-[#48564F] mb-1">
-                  Deskripsi Singkat:
-                </label>
+                <label className="block text-xs font-semibold text-[#48564F] mb-1">Deskripsi Singkat:</label>
                 <textarea
                   rows={2}
                   placeholder="Penjelasan keunggulan produk, tekstur, dan saran olahan..."
@@ -1280,77 +1289,65 @@ export default function AdminPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-[#48564F] mb-1">Badge / Label:</label>
+              {/* URL Gambar Produk */}
+              <div>
+                <label className="block text-xs font-semibold text-[#48564F] mb-1">URL Gambar Produk:</label>
+                <div className="flex gap-2 items-center">
                   <input
                     type="text"
-                    placeholder="Misal: Best Seller / Promo"
+                    placeholder="/images/products/foto-produk.jpeg"
+                    value={editingProduct.image || ''}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, image: e.target.value })}
+                    className="flex-1 px-3 py-2 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs text-[#111613] focus:outline-none focus:border-[#C59B47] font-mono"
+                  />
+                  {editingProduct.image && (
+                    <div className="w-10 h-10 rounded-lg overflow-hidden border border-[#EAE4DC] bg-[#F7F4EE] flex-shrink-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={editingProduct.image}
+                        alt="Preview gambar"
+                        className="w-full h-full object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                      />
+                    </div>
+                  )}
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1">Path dari folder /public, contoh: /images/products/foto-babat.jpeg</p>
+              </div>
+
+              {/* Badge + Ketersediaan */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[#48564F] mb-1">Badge / Label Produk:</label>
+                  <input
+                    type="text"
+                    placeholder="Misal: Best Seller / Promo / Baru"
                     value={editingProduct.badge || ''}
                     onChange={(e) => setEditingProduct({ ...editingProduct, badge: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs text-[#111613] focus:outline-none focus:border-[#C59B47]"
                   />
                 </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#48564F] mb-1">Diskon (%):</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    placeholder="0"
-                    value={editingProduct.discountPercent || ''}
-                    onChange={(e) =>
-                      setEditingProduct({
-                        ...editingProduct,
-                        discountPercent: parseInt(e.target.value) || 0,
-                      })
-                    }
-                    className="w-full px-3 py-2 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs text-[#111613] focus:outline-none focus:border-[#C59B47]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#48564F] mb-1">
-                    Harga Coret (Rp):
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="0"
-                    value={editingProduct.originalPrice || ''}
-                    onChange={(e) =>
-                      setEditingProduct({
-                        ...editingProduct,
-                        originalPrice: parseInt(e.target.value) || 0,
-                      })
-                    }
-                    className="w-full px-3 py-2 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs text-[#111613] focus:outline-none focus:border-[#C59B47]"
-                  />
+                <div className="flex items-end pb-1">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="availCheck"
+                      checked={editingProduct.isAvailable !== false}
+                      onChange={(e) => setEditingProduct({ ...editingProduct, isAvailable: e.target.checked })}
+                      className="rounded text-[#C59B47] focus:ring-[#C59B47]"
+                    />
+                    <label htmlFor="availCheck" className="text-xs text-[#111613] font-medium cursor-pointer">
+                      Menu Aktif / Stok Tersedia
+                    </label>
+                  </div>
                 </div>
               </div>
 
-              {/* Status Ketersediaan */}
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="checkbox"
-                  id="availCheck"
-                  checked={editingProduct.isAvailable !== false}
-                  onChange={(e) =>
-                    setEditingProduct({ ...editingProduct, isAvailable: e.target.checked })
-                  }
-                  className="rounded text-[#C59B47] focus:ring-[#C59B47]"
-                />
-                <label htmlFor="availCheck" className="text-xs text-[#111613] font-medium cursor-pointer">
-                  Menu Tersedia untuk Dipesan (Stok Aktif)
-                </label>
-              </div>
-
-              {/* Varian List */}
+              {/* Varian Kemasan & Harga */}
               <div className="pt-2 border-t border-gray-100 space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-[#111613] uppercase tracking-wider">
-                    Varian Kemasan & Harga (IDR)
+                    Varian Kemasan, Harga &amp; Diskon
                   </label>
                   <button
                     type="button"
@@ -1373,50 +1370,86 @@ export default function AdminPage() {
                     + Tambah Varian
                   </button>
                 </div>
-
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                {/* Header kolom */}
+                <div className="grid grid-cols-12 gap-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-3">
+                  <div className="col-span-4">Nama Varian</div>
+                  <div className="col-span-2">Berat</div>
+                  <div className="col-span-2">Harga (Rp)</div>
+                  <div className="col-span-2">H. Coret</div>
+                  <div className="col-span-1">Dis%</div>
+                  <div className="col-span-1"></div>
+                </div>
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                   {editingProduct.variants?.map((v, idx) => (
                     <div
                       key={v.id || idx}
-                      className="p-3 rounded-xl bg-[#FAF8F5] border border-[#EAE4DC] grid grid-cols-12 gap-2 items-center text-xs"
+                      className="p-2 rounded-xl bg-[#FAF8F5] border border-[#EAE4DC] grid grid-cols-12 gap-2 items-center text-xs"
                     >
-                      <div className="col-span-5">
+                      <div className="col-span-4">
                         <input
                           type="text"
                           placeholder="Nama Varian"
                           value={v.name}
                           onChange={(e) => {
                             const newVars = [...(editingProduct.variants || [])]
-                            newVars[idx].name = e.target.value
+                            newVars[idx] = { ...newVars[idx], name: e.target.value }
                             setEditingProduct({ ...editingProduct, variants: newVars })
                           }}
-                          className="w-full px-2 py-1 rounded-lg bg-white border border-[#D8CEBE]"
+                          className="w-full px-2 py-1 rounded-lg bg-white border border-[#D8CEBE] text-xs"
                         />
                       </div>
-                      <div className="col-span-3">
+                      <div className="col-span-2">
                         <input
                           type="text"
-                          placeholder="Berat (e.g. 250 gr)"
+                          placeholder="250 gr"
                           value={v.weight}
                           onChange={(e) => {
                             const newVars = [...(editingProduct.variants || [])]
-                            newVars[idx].weight = e.target.value
+                            newVars[idx] = { ...newVars[idx], weight: e.target.value }
                             setEditingProduct({ ...editingProduct, variants: newVars })
                           }}
-                          className="w-full px-2 py-1 rounded-lg bg-white border border-[#D8CEBE]"
+                          className="w-full px-2 py-1 rounded-lg bg-white border border-[#D8CEBE] text-xs"
                         />
                       </div>
-                      <div className="col-span-3">
+                      <div className="col-span-2">
                         <input
                           type="number"
-                          placeholder="Harga Rp"
-                          value={v.price}
+                          placeholder="50000"
+                          value={v.price || ''}
                           onChange={(e) => {
                             const newVars = [...(editingProduct.variants || [])]
-                            newVars[idx].price = parseInt(e.target.value) || 0
+                            newVars[idx] = { ...newVars[idx], price: parseInt(e.target.value) || 0 }
                             setEditingProduct({ ...editingProduct, variants: newVars })
                           }}
-                          className="w-full px-2 py-1 rounded-lg bg-white border border-[#D8CEBE] font-mono"
+                          className="w-full px-2 py-1 rounded-lg bg-white border border-[#D8CEBE] text-xs font-mono"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <input
+                          type="number"
+                          placeholder="0"
+                          value={v.originalPrice || ''}
+                          onChange={(e) => {
+                            const newVars = [...(editingProduct.variants || [])]
+                            newVars[idx] = { ...newVars[idx], originalPrice: parseInt(e.target.value) || 0 }
+                            setEditingProduct({ ...editingProduct, variants: newVars })
+                          }}
+                          className="w-full px-2 py-1 rounded-lg bg-white border border-[#D8CEBE] text-xs font-mono"
+                        />
+                      </div>
+                      <div className="col-span-1">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          placeholder="0"
+                          value={v.discountPercent || ''}
+                          onChange={(e) => {
+                            const newVars = [...(editingProduct.variants || [])]
+                            newVars[idx] = { ...newVars[idx], discountPercent: parseInt(e.target.value) || 0 }
+                            setEditingProduct({ ...editingProduct, variants: newVars })
+                          }}
+                          className="w-full px-2 py-1 rounded-lg bg-white border border-[#D8CEBE] text-xs text-center"
                         />
                       </div>
                       <div className="col-span-1 text-right">
@@ -1427,7 +1460,7 @@ export default function AdminPage() {
                               const newVars = editingProduct.variants?.filter((_, i) => i !== idx)
                               setEditingProduct({ ...editingProduct, variants: newVars })
                             }}
-                            className="text-red-500 hover:text-red-700"
+                            className="text-red-400 hover:text-red-600 font-bold"
                           >
                             ✕
                           </button>
@@ -1572,6 +1605,24 @@ export default function AdminPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className={`fixed bottom-6 right-6 z-[9999] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-xl text-sm font-semibold transition-all animate-in slide-in-from-bottom-4 ${
+            toast.type === 'success'
+              ? 'bg-[#1D6C48] text-white'
+              : 'bg-crimson text-white'
+          }`}
+        >
+          {toast.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+          ) : (
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          )}
+          <span>{toast.message}</span>
         </div>
       )}
     </div>

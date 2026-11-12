@@ -6,6 +6,8 @@ export interface ProductVariant {
   portion: string
   minQty: number
   price: number // in IDR (integer)
+  originalPrice?: number // harga coret per varian
+  discountPercent?: number // diskon % per varian
   isAvailable: boolean
 }
 
