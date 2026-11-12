@@ -31,8 +31,11 @@ import {
   Upload,
   Camera,
   ImageIcon,
+  Receipt,
 } from 'lucide-react'
 import { AdminOrder, AdminProduct, ActivityLog, OrderStatus } from '@/lib/admin-store'
+import OrderPrintModal from '@/components/admin/OrderPrintModal'
+import PosCashierTab from '@/components/admin/PosCashierTab'
 
 export default function AdminPage() {
   // Auth state
@@ -42,7 +45,7 @@ export default function AdminPage() {
   const [loginLoading, setLoginLoading] = useState(false)
 
   // Navigation tab
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'orders' | 'menu' | 'logs'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'orders' | 'menu' | 'logs'>('dashboard')
 
   // Data states
   const [orders, setOrders] = useState<AdminOrder[]>([])
@@ -525,6 +528,18 @@ export default function AdminPage() {
           </button>
 
           <button
+            onClick={() => setActiveTab('pos')}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'pos'
+                ? 'bg-[#111613] text-white shadow-md'
+                : 'text-[#8C6B24] bg-[#FAF6F0] border border-[#E8DFD5] hover:bg-[#F2ECE1]'
+            }`}
+          >
+            <Receipt className="w-4 h-4 text-[#C59B47]" />
+            <span>Kasir POS (Cepat)</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('orders')}
             className={`px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all flex items-center gap-2 whitespace-nowrap relative ${
               activeTab === 'orders'
@@ -767,6 +782,18 @@ export default function AdminPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* ======================= TAB: KASIR POS (CEPAT) ======================= */}
+        {activeTab === 'pos' && (
+          <PosCashierTab
+            products={products}
+            onOrderCreated={(newOrder) => {
+              setOrders((prev) => [newOrder, ...prev])
+              setSelectedOrderForPrint(newOrder)
+            }}
+            showToast={showToast}
+          />
         )}
 
         {/* ======================= TAB 2: ORDERAN MASUK ======================= */}
@@ -1672,119 +1699,12 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* ======================= MODAL / PRINT SHEET: CETAK NOTA ======================= */}
+      {/* ======================= DUAL PRINT MODAL (THERMAL & SURAT JALAN) ======================= */}
       {selectedOrderForPrint && (
-        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm overflow-y-auto p-3 sm:p-6 flex justify-center items-start sm:items-center">
-          <div className="relative max-w-lg w-full bg-white rounded-3xl p-6 sm:p-8 border border-gray-200 shadow-2xl my-4 sm:my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-4rem)] overflow-y-auto space-y-6 text-[#111613]">
-            {/* Header Nota */}
-            <div className="flex items-center justify-between border-b border-gray-200 pb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 relative flex-shrink-0">
-                  <Image
-                    src="/images/branding/logo-hatoba-gold.png"
-                    alt="Logo"
-                    width={48}
-                    height={48}
-                    className="w-full h-full object-contain"
-                  />
-                </div>
-                <div>
-                  <span className="font-serif-title font-bold text-base tracking-wider block">
-                    HATOBA FROZEN FOOD
-                  </span>
-                  <span className="text-[9px] uppercase tracking-widest text-[#8C6B24] font-semibold block">
-                    Holding Group Rantai Dingin
-                  </span>
-                </div>
-              </div>
-
-              <div className="text-right">
-                <span className="font-mono font-bold text-sm text-[#111613] block">
-                  {selectedOrderForPrint.referenceCode}
-                </span>
-                <span className="text-[10px] text-gray-500">
-                  {new Date(selectedOrderForPrint.createdAt).toLocaleDateString('id-ID', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric',
-                  })}
-                </span>
-              </div>
-            </div>
-
-            {/* Info Pelanggan */}
-            <div className="grid grid-cols-2 gap-3 text-xs bg-[#FAF8F5] p-3.5 rounded-xl border border-[#EAE4DC]">
-              <div>
-                <span className="text-[10px] text-gray-500 block">Pemesan:</span>
-                <span className="font-bold text-[#111613] block">
-                  {selectedOrderForPrint.customerName}
-                </span>
-                <span className="text-[11px] text-gray-600">
-                  {selectedOrderForPrint.businessName || '-'}
-                </span>
-                <span className="text-[11px] text-gray-500 block">{selectedOrderForPrint.phone}</span>
-              </div>
-              <div className="text-right">
-                <span className="text-[10px] text-gray-500 block">Hub & Kota Kirim:</span>
-                <span className="font-bold text-[#111613] block">
-                  {selectedOrderForPrint.hubArea}
-                </span>
-                <span className="text-[11px] text-gray-600 block">{selectedOrderForPrint.city}</span>
-                <span className="text-[10px] text-[#8C6B24] font-semibold block mt-1">
-                  Marketing: {selectedOrderForPrint.marketingName || 'Organik'}
-                </span>
-              </div>
-            </div>
-
-            {/* Rincian Produk */}
-            <div className="space-y-2">
-              <span className="text-[11px] font-bold text-[#111613] uppercase tracking-wider block border-b border-gray-100 pb-1">
-                Daftar Menu & Kuantiti
-              </span>
-              <table className="w-full text-xs">
-                <tbody>
-                  {selectedOrderForPrint.items.map((it, idx) => (
-                    <tr key={idx} className="border-b border-gray-50">
-                      <td className="py-1.5 font-medium">
-                        {it.productName} <span className="text-gray-400">({it.variantName})</span>
-                      </td>
-                      <td className="py-1.5 text-center font-mono font-bold">{it.quantity}x</td>
-                      <td className="py-1.5 text-right font-mono font-semibold">
-                        {formatIDR(it.subtotal)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              <div className="pt-3 border-t border-gray-200 flex items-center justify-between font-mono">
-                <span className="font-bold text-xs">Total Pembayaran:</span>
-                <span className="font-bold text-base text-emerald-800">
-                  {formatIDR(selectedOrderForPrint.totalAmount)}
-                </span>
-              </div>
-            </div>
-
-            {/* Action Print Buttons */}
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => setSelectedOrderForPrint(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100"
-              >
-                Tutup
-              </button>
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="px-5 py-2 rounded-xl bg-[#111613] hover:bg-black text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                <span>Cetak / Simpan PDF</span>
-              </button>
-            </div>
-          </div>
-        </div>
+        <OrderPrintModal
+          order={selectedOrderForPrint}
+          onClose={() => setSelectedOrderForPrint(null)}
+        />
       )}
 
       {/* Toast Notification */}

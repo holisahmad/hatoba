@@ -1,6 +1,6 @@
 import { CORPORATE_CONTACT } from './catalog-data'
 
-export function generateReferenceCode(prefix: 'ORD' | 'INQ' | 'CORP'): string {
+export function generateReferenceCode(prefix: 'ORD' | 'INQ' | 'CORP' | 'POS'): string {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
   const randomSuffix = Math.floor(1000 + Math.random() * 9000)
   return `HTB-${prefix}-${dateStr}-${randomSuffix}`

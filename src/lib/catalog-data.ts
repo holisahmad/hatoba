@@ -477,7 +477,7 @@ export const RAW_PRODUCTS = [
 export const CORPORATE_CONTACT = {
   phone: '+62 821-7368-358',
   phoneClean: '628217368358',
-  email: 'corporate@hatobagroup.com',
+  email: ' emailnyahatoba@gmail.com',
   workingHours: 'Senin - Sabtu: 08.00 - 17.00 WITA / WIB',
   catalogs: {
     landscape: '/docs/Katalog_Produk_HATOBA_landscape.pdf',

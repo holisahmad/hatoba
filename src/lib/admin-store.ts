@@ -29,6 +29,11 @@ export interface AdminOrder {
   verifiedAt?: string
   rejectedAt?: string
   statusNotes?: string
+  paymentMethod?: string
+  paymentStatus?: 'LUNAS' | 'DP' | 'TEMPO' | 'BELUM_BAYAR'
+  source?: 'WEB' | 'POS' | 'WHATSAPP' | 'TELEPON'
+  paidAmount?: number
+  changeAmount?: number
 }
 
 export interface AdminProduct extends ProductItem {

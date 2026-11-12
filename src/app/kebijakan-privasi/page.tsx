@@ -67,7 +67,7 @@ export default function KebijakanPrivasiPage() {
             <h3 className="text-lg font-bold text-[#111613]">5. Kontak Petugas Privasi</h3>
             <p>
               Jika Anda memiliki pertanyaan mengenai data pribadi Anda, Anda dapat menghubungi kami via
-              email: <code>corporate@hatobagroup.com</code> atau WhatsApp: <code>+62 821-7368-358</code>.
+              email: <code> emailnyahatoba@gmail.com</code> atau WhatsApp: <code>+62 821-7368-358</code>.
             </p>
           </div>
         </div>
