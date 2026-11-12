@@ -5,6 +5,8 @@ asset/**
 # Local data storage
 data/*.json
 !data/.gitkeep
+public/uploads/*
+!public/uploads/.gitkeep
 
 # Dependencies
 /node_modules

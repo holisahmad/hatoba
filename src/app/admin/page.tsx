@@ -28,6 +28,9 @@ import {
   ArrowUpRight,
   Layers,
   Sparkles,
+  Upload,
+  Camera,
+  ImageIcon,
 } from 'lucide-react'
 import { AdminOrder, AdminProduct, ActivityLog, OrderStatus } from '@/lib/admin-store'
 
@@ -67,6 +70,39 @@ export default function AdminPage() {
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type })
     setTimeout(() => setToast(null), 3500)
+  }
+
+  // Image upload state & handler
+  const [uploadingField, setUploadingField] = useState<'packaging' | 'serving' | null>(null)
+
+  const handleFileUpload = async (file: File, target: 'packaging' | 'serving') => {
+    if (!file) return
+    setUploadingField(target)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const res = await fetch('/api/admin/upload', {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await res.json()
+
+      if (data.success && data.url) {
+        if (target === 'packaging') {
+          setEditingProduct((prev) => (prev ? { ...prev, packagingImage: data.url } : prev))
+        } else {
+          setEditingProduct((prev) => (prev ? { ...prev, image: data.url } : prev))
+        }
+        showToast(`Foto ${target === 'packaging' ? 'kemasan' : 'sajian'} berhasil diunggah!`)
+      } else {
+        showToast(data.error || 'Gagal mengunggah foto.', 'error')
+      }
+    } catch {
+      showToast('Koneksi gagal saat mengunggah foto.', 'error')
+    } finally {
+      setUploadingField(null)
+    }
   }
 
   // Check auth on mount
@@ -214,11 +250,12 @@ export default function AdminPage() {
       if (data.success) {
         setProducts((prev) => prev.filter((p) => p.id !== productId))
         fetchAllData()
+        showToast(`Menu "${productName}" berhasil dihapus.`)
       } else {
-        alert(data.error || 'Gagal menghapus menu.')
+        showToast(data.error || 'Gagal menghapus menu.', 'error')
       }
     } catch {
-      alert('Terjadi kesalahan koneksi saat menghapus.')
+      showToast('Terjadi kesalahan koneksi saat menghapus.', 'error')
     }
   }
 
@@ -1297,30 +1334,156 @@ export default function AdminPage() {
                 />
               </div>
 
-              {/* URL Gambar Produk */}
-              <div>
-                <label className="block text-xs font-semibold text-[#48564F] mb-1">URL Gambar Produk:</label>
-                <div className="flex gap-2 items-center">
-                  <input
-                    type="text"
-                    placeholder="/images/products/foto-produk.jpeg"
-                    value={editingProduct.image || ''}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, image: e.target.value })}
-                    className="flex-1 px-3 py-2 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs text-[#111613] focus:outline-none focus:border-[#C59B47] font-mono"
-                  />
-                  {editingProduct.image && (
-                    <div className="w-10 h-10 rounded-lg overflow-hidden border border-[#EAE4DC] bg-[#F7F4EE] flex-shrink-0">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={editingProduct.image}
-                        alt="Preview gambar"
-                        className="w-full h-full object-cover"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                      />
-                    </div>
-                  )}
+              {/* 2 Gambar Produk: Kemasan & Sajian */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-[#111613] uppercase tracking-wider">
+                    Foto Produk (Kemasan &amp; Sajian):
+                  </label>
+                  <span className="text-[10px] text-gray-500">
+                    Upload langsung dari HP / Laptop atau masukkan URL
+                  </span>
                 </div>
-                <p className="text-[10px] text-gray-400 mt-1">Path dari folder /public, contoh: /images/products/foto-babat.jpeg</p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {/* 1. Foto Kemasan */}
+                  <div className="p-3 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-[#111613] flex items-center gap-1.5">
+                        <Layers className="w-3.5 h-3.5 text-[#C59B47]" />
+                        Foto Kemasan (Pouch / Vacuum)
+                      </span>
+                      <span className="text-[9px] text-[#8C6B24] font-semibold bg-[#F5EFE6] px-2 py-0.5 rounded-full border border-[#E2D6C5]">
+                        Tampilan Depan
+                      </span>
+                    </div>
+
+                    {/* Preview Thumbnail */}
+                    <div className="relative aspect-[4/3] w-full rounded-xl bg-white border border-[#E8DFD5] overflow-hidden flex items-center justify-center">
+                      {editingProduct.packagingImage ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={editingProduct.packagingImage}
+                          alt="Preview Kemasan"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            ;(e.target as HTMLImageElement).src = '/images/products/kemasan-babat.png'
+                          }}
+                        />
+                      ) : (
+                        <div className="text-center p-3 text-gray-400">
+                          <ImageIcon className="w-7 h-7 mx-auto mb-1 opacity-40" />
+                          <span className="text-[10px] block">Belum ada foto kemasan</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Tombol Upload dari HP / Laptop */}
+                    <div>
+                      <label
+                        className={`w-full py-2 px-3 rounded-xl border border-dashed border-[#C59B47] bg-white hover:bg-[#FAF6F0] cursor-pointer flex items-center justify-center gap-2 text-xs font-semibold text-[#8C6B24] transition-all shadow-sm ${
+                          uploadingField === 'packaging' ? 'opacity-50 pointer-events-none' : ''
+                        }`}
+                      >
+                        <Camera className="w-3.5 h-3.5" />
+                        <span>
+                          {uploadingField === 'packaging'
+                            ? 'Mengunggah...'
+                            : 'Upload dari HP / Laptop'}
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) handleFileUpload(file, 'packaging')
+                          }}
+                        />
+                      </label>
+                    </div>
+
+                    {/* URL text fallback */}
+                    <input
+                      type="text"
+                      placeholder="Atau URL: /images/products/kemasan-..."
+                      value={editingProduct.packagingImage || ''}
+                      onChange={(e) =>
+                        setEditingProduct({ ...editingProduct, packagingImage: e.target.value })
+                      }
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-[#D8CEBE] text-[10px] text-[#111613] font-mono focus:outline-none focus:border-[#C59B47]"
+                    />
+                  </div>
+
+                  {/* 2. Foto Sajian */}
+                  <div className="p-3 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-[#111613] flex items-center gap-1.5">
+                        <UtensilsCrossed className="w-3.5 h-3.5 text-[#1D6C48]" />
+                        Foto Sajian (Masakan Olahan)
+                      </span>
+                      <span className="text-[9px] text-[#1D6C48] font-semibold bg-[#E8F4EE] px-2 py-0.5 rounded-full border border-[#BCE2CD]">
+                        Tampilan Sajian
+                      </span>
+                    </div>
+
+                    {/* Preview Thumbnail */}
+                    <div className="relative aspect-[4/3] w-full rounded-xl bg-white border border-[#E8DFD5] overflow-hidden flex items-center justify-center">
+                      {editingProduct.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={editingProduct.image}
+                          alt="Preview Sajian"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            ;(e.target as HTMLImageElement).src = '/images/products/foto-babat.jpeg'
+                          }}
+                        />
+                      ) : (
+                        <div className="text-center p-3 text-gray-400">
+                          <ImageIcon className="w-7 h-7 mx-auto mb-1 opacity-40" />
+                          <span className="text-[10px] block">Belum ada foto sajian</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Tombol Upload dari HP / Laptop */}
+                    <div>
+                      <label
+                        className={`w-full py-2 px-3 rounded-xl border border-dashed border-[#1D6C48] bg-white hover:bg-[#F3F9F5] cursor-pointer flex items-center justify-center gap-2 text-xs font-semibold text-[#1D6C48] transition-all shadow-sm ${
+                          uploadingField === 'serving' ? 'opacity-50 pointer-events-none' : ''
+                        }`}
+                      >
+                        <Camera className="w-3.5 h-3.5" />
+                        <span>
+                          {uploadingField === 'serving'
+                            ? 'Mengunggah...'
+                            : 'Upload dari HP / Laptop'}
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) handleFileUpload(file, 'serving')
+                          }}
+                        />
+                      </label>
+                    </div>
+
+                    {/* URL text fallback */}
+                    <input
+                      type="text"
+                      placeholder="Atau URL: /images/products/foto-..."
+                      value={editingProduct.image || ''}
+                      onChange={(e) =>
+                        setEditingProduct({ ...editingProduct, image: e.target.value })
+                      }
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-[#D8CEBE] text-[10px] text-[#111613] font-mono focus:outline-none focus:border-[#C59B47]"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Badge + Ketersediaan */}
