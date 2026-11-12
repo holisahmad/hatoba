@@ -126,6 +126,8 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
     (order.status === 'VERIFIED' && order.paymentStatus !== 'DP' && order.paymentStatus !== 'TEMPO')
   const isDP = order.paymentStatus === 'DP'
   const isTempo = order.paymentStatus === 'TEMPO'
+  // CAMPURAN: DP status but paymentMethod contains "Tempo" (set by POS campuran mode)
+  const isCampuran = isDP && (order.paymentMethod || '').toLowerCase().includes('tempo')
 
   return (
     <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
@@ -314,14 +316,16 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
                       className={`font-bold px-2 py-0.5 rounded text-[11px] ${
                         isPaid
                           ? 'bg-emerald-100 text-emerald-800'
+                          : isCampuran
+                          ? 'bg-blue-100 text-blue-800'
                           : isDP
                           ? 'bg-amber-100 text-amber-800'
                           : isTempo
-                          ? 'bg-blue-100 text-blue-800'
+                          ? 'bg-orange-100 text-orange-800'
                           : 'bg-red-100 text-red-800'
                       }`}
                     >
-                      {isPaid ? 'LUNAS' : isDP ? 'DP DITERIMA' : isTempo ? 'TEMPO B2B' : 'MENUNGGU PEMBAYARAN'}
+                      {isPaid ? 'LUNAS' : isCampuran ? 'BAYAR + TEMPO' : isDP ? 'DP DITERIMA' : isTempo ? 'TEMPO B2B' : 'MENUNGGU PEMBAYARAN'}
                     </span>
                   </div>
                   <div className="flex justify-between items-center text-xs pt-1 border-t border-gray-200">
@@ -386,7 +390,7 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
                     </div>
                   )}
 
-                  {isDP && (
+                  {isDP && !isCampuran && (
                     <div className="w-36 h-36 rounded-full border-4 border-dashed border-amber-600/80 flex flex-col items-center justify-center -rotate-12 bg-amber-50/40 p-2 shadow-xs">
                       <div className="text-[10px] font-bold tracking-widest text-amber-800 uppercase">
                         ★ HATOBA ★
@@ -403,18 +407,35 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
                     </div>
                   )}
 
-                  {isTempo && (
-                    <div className="w-36 h-36 rounded-full border-4 border-dashed border-blue-600/80 flex flex-col items-center justify-center -rotate-12 bg-blue-50/40 p-2 shadow-xs">
+                  {isCampuran && (
+                    <div className="w-36 h-36 rounded-full border-4 border-dashed border-blue-500/80 flex flex-col items-center justify-center -rotate-12 bg-blue-50/40 p-2 shadow-xs">
                       <div className="text-[10px] font-bold tracking-widest text-blue-800 uppercase">
                         ★ HATOBA ★
                       </div>
-                      <div className="text-lg font-black text-blue-700 tracking-wider font-sans my-0.5">
-                        TEMPO B2B
+                      <div className="text-[13px] font-black text-blue-700 tracking-wider font-sans my-0.5 text-center leading-tight">
+                        BAYAR<br/>+ TEMPO
                       </div>
                       <div className="text-[9px] font-bold text-blue-800 tracking-wider">
+                        MIXED PAYMENT
+                      </div>
+                      <div className="text-[8px] text-blue-700 font-mono mt-0.5 text-center">
+                        Sisa: {typeof order.paidAmount === 'number' ? formatIDR(order.totalAmount - order.paidAmount) : '-'}
+                      </div>
+                    </div>
+                  )}
+
+                  {isTempo && (
+                    <div className="w-36 h-36 rounded-full border-4 border-dashed border-orange-600/80 flex flex-col items-center justify-center -rotate-12 bg-orange-50/40 p-2 shadow-xs">
+                      <div className="text-[10px] font-bold tracking-widest text-orange-800 uppercase">
+                        ★ HATOBA ★
+                      </div>
+                      <div className="text-lg font-black text-orange-700 tracking-wider font-sans my-0.5">
+                        TEMPO B2B
+                      </div>
+                      <div className="text-[9px] font-bold text-orange-800 tracking-wider">
                         TERM OF PAYMENT
                       </div>
-                      <div className="text-[8px] text-blue-700 font-mono mt-0.5">
+                      <div className="text-[8px] text-orange-700 font-mono mt-0.5">
                         Mitra Restoran
                       </div>
                     </div>
@@ -518,12 +539,16 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
                       className={`inline-block px-2.5 py-0.5 text-[10px] font-bold rounded border ${
                         isPaid
                           ? 'border-emerald-600 text-emerald-800 bg-emerald-50'
+                          : isCampuran
+                          ? 'border-blue-500 text-blue-800 bg-blue-50'
                           : isDP
                           ? 'border-amber-600 text-amber-800 bg-amber-50'
+                          : isTempo
+                          ? 'border-orange-600 text-orange-800 bg-orange-50'
                           : 'border-gray-500 text-gray-700 bg-gray-50'
                       }`}
                     >
-                      *** {isPaid ? 'LUNAS / PAID' : isDP ? 'DP DITERIMA' : 'TAGIHAN / UNPAID'} ***
+                      *** {isPaid ? 'LUNAS / PAID' : isCampuran ? 'BAYAR + TEMPO' : isDP ? 'DP DITERIMA' : isTempo ? 'TEMPO B2B' : 'TAGIHAN / UNPAID'} ***
                     </span>
                   </div>
                 </div>

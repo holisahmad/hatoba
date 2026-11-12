@@ -62,8 +62,9 @@ export default function PosCashierTab({
   const [notes, setNotes] = useState('')
 
   // Payment form
-  const [paymentMethod, setPaymentMethod] = useState<'Tunai' | 'Transfer BCA' | 'Transfer Mandiri' | 'Tempo B2B' | 'QRIS'>('Tunai')
-  const [paymentTypeOption, setPaymentTypeOption] = useState<'LUNAS' | 'DP'>('LUNAS')
+  const [paymentMode, setPaymentMode] = useState<'LUNAS' | 'DP' | 'TEMPO' | 'CAMPURAN'>('LUNAS')
+  // paymentMethod: metode tunai/non-tunai (tidak termasuk Tempo — Tempo adalah paymentMode)
+  const [paymentMethod, setPaymentMethod] = useState<'Tunai' | 'Transfer BCA' | 'Transfer Mandiri' | 'QRIS'>('Tunai')
   const [paymentStatus, setPaymentStatus] = useState<'LUNAS' | 'DP' | 'TEMPO' | 'BELUM_BAYAR'>('LUNAS')
   const [paidAmountInput, setPaidAmountInput] = useState<string>('')
   const [discountNominal, setDiscountNominal] = useState<number>(0)
@@ -73,20 +74,22 @@ export default function PosCashierTab({
   const rawSubtotal = cart.reduce((sum, it) => sum + it.subtotal, 0)
   const finalTotal = Math.max(0, rawSubtotal - (discountNominal || 0))
 
-  // Paid amount calculation:
-  // Non-cash methods in POS are strictly LUNAS or DP. Zero-payment is exclusively Tempo B2B.
-  let paidAmount = finalTotal
-  if (paymentMethod === 'Tempo B2B') {
+  // Paid amount logic per mode:
+  // - LUNAS: full payment (Tunai may have input for change calculation, non-cash = full)
+  // - DP: partial upfront, rest = piutang (not tempo, just unsettled debt)
+  // - TEMPO: 0 paid now, full amount = piutang tempo
+  // - CAMPURAN: partial paid via cash/transfer NOW + rest explicitly = piutang tempo
+  const parsedInput = paidAmountInput.trim() !== '' ? parseFloat(paidAmountInput.replace(/[^0-9]/g, '')) : NaN
+  let paidAmount: number
+  if (paymentMode === 'TEMPO') {
     paidAmount = 0
-  } else if (paymentTypeOption === 'DP') {
-    const rawNum = parseFloat(paidAmountInput.replace(/[^0-9]/g, ''))
-    paidAmount = isNaN(rawNum) ? 0 : rawNum
-  } else if (paymentMethod === 'Tunai' && paidAmountInput.trim() !== '') {
-    const rawNum = parseFloat(paidAmountInput.replace(/[^0-9]/g, ''))
-    paidAmount = isNaN(rawNum) ? finalTotal : rawNum
-  } else {
-    // Non-cash LUNAS default
+  } else if (paymentMode === 'LUNAS' && paymentMethod === 'Tunai' && !isNaN(parsedInput)) {
+    paidAmount = parsedInput
+  } else if (paymentMode === 'LUNAS') {
     paidAmount = finalTotal
+  } else {
+    // DP or CAMPURAN: use the input field
+    paidAmount = isNaN(parsedInput) ? 0 : parsedInput
   }
 
   const changeAmount = Math.max(0, paidAmount - finalTotal)
@@ -168,7 +171,7 @@ export default function PosCashierTab({
     setNotes('')
     setPaidAmountInput('')
     setDiscountNominal(0)
-    setPaymentTypeOption('LUNAS')
+    setPaymentMode('LUNAS')
     setPaymentMethod('Tunai')
   }
 
@@ -193,43 +196,62 @@ export default function PosCashierTab({
 
     try {
       // Payment status rules:
-      // 1. Tempo B2B -> Status: TEMPO (order PENDING)
-      // 2. DP Option -> Status: DP (order PENDING) with DP amount recorded
-      // 3. LUNAS Option -> Status: LUNAS (order VERIFIED)
-      // Non-cash NEVER allows zero/unpaid.
+      // - LUNAS  → Status LUNAS, Order VERIFIED
+      // - DP     → Status DP (uang muka / cicilan), Order PENDING
+      // - TEMPO  → Status TEMPO (full kredit), Order PENDING
+      // - CAMPURAN → Status DP (bayar sebagian sekarang + sisa jadi piutang tempo), Order PENDING
       let autoPaymentStatus: 'LUNAS' | 'DP' | 'TEMPO' | 'BELUM_BAYAR' = 'LUNAS'
       let autoStatusNotes = ''
       let autoOrderStatus: 'VERIFIED' | 'PENDING' = 'VERIFIED'
+      // paymentMethod label untuk struk (CAMPURAN = metode bayar + Tempo B2B)
+      const displayMethod = paymentMode === 'CAMPURAN' ? `${paymentMethod} + Tempo B2B` : paymentMethod
+      const displayMethodForDB = paymentMode === 'TEMPO' ? 'Tempo B2B' : displayMethod
 
-      if (paymentMethod === 'Tempo B2B') {
+      if (paymentMode === 'TEMPO') {
         autoPaymentStatus = 'TEMPO'
         autoOrderStatus = 'PENDING'
-        autoStatusNotes = 'Tempo B2B (Faktur ditagihkan sesuai kesepakatan)'
-      } else if (paymentTypeOption === 'DP') {
+        autoStatusNotes = `Full Tempo B2B — Tagihan: ${formatIDR(finalTotal)} (dibayar sesuai jatuh tempo)`
+      } else if (paymentMode === 'DP') {
         if (paidAmount <= 0) {
-          showToast(`Nominal DP untuk ${paymentMethod} wajib diisi lebih dari Rp 0.`, 'error')
+          showToast('Nominal DP wajib diisi lebih dari Rp 0.', 'error')
           setLoading(false)
           return
         }
         if (paidAmount >= finalTotal) {
           autoPaymentStatus = 'LUNAS'
           autoOrderStatus = 'VERIFIED'
-          autoStatusNotes = `Lunas via ${paymentMethod} (${formatIDR(paidAmount)}${changeAmount > 0 ? `, Kembali: ${formatIDR(changeAmount)}` : ''})`
+          autoStatusNotes = `Lunas via ${paymentMethod} — Dibayar: ${formatIDR(paidAmount)}${changeAmount > 0 ? `, Kembali: ${formatIDR(changeAmount)}` : ''}`
         } else {
           autoPaymentStatus = 'DP'
           autoOrderStatus = 'PENDING'
-          autoStatusNotes = `DP Diterima via ${paymentMethod}: ${formatIDR(paidAmount)} (Sisa Tagihan: ${formatIDR(shortfallAmount)})`
+          autoStatusNotes = `DP via ${paymentMethod} — Masuk: ${formatIDR(paidAmount)}, Sisa Piutang: ${formatIDR(shortfallAmount)}`
+        }
+      } else if (paymentMode === 'CAMPURAN') {
+        if (paidAmount <= 0) {
+          showToast('Nominal yang dibayar sekarang wajib diisi lebih dari Rp 0.', 'error')
+          setLoading(false)
+          return
+        }
+        if (paidAmount >= finalTotal) {
+          // Dibayar penuh, tidak perlu tempo
+          autoPaymentStatus = 'LUNAS'
+          autoOrderStatus = 'VERIFIED'
+          autoStatusNotes = `Lunas via ${paymentMethod} — Dibayar: ${formatIDR(paidAmount)}${changeAmount > 0 ? `, Kembali: ${formatIDR(changeAmount)}` : ''}`
+        } else {
+          autoPaymentStatus = 'DP'
+          autoOrderStatus = 'PENDING'
+          autoStatusNotes = `Campuran: Dibayar ${formatIDR(paidAmount)} via ${paymentMethod}, Sisa ${formatIDR(shortfallAmount)} masuk Tempo B2B (piutang jatuh tempo)`
         }
       } else {
-        // Mode LUNAS
+        // LUNAS
         if (paymentMethod === 'Tunai' && paidAmount < finalTotal) {
-          showToast(`Uang tunai kurang dari total tagihan. Pilih opsi 'DP (Uang Muka)' jika pelanggan membayar sebagian.`, 'error')
+          showToast(`Uang tunai kurang dari total tagihan. Pilih 'DP' atau 'Campuran + Tempo' jika pelanggan tidak bayar penuh.`, 'error')
           setLoading(false)
           return
         }
         autoPaymentStatus = 'LUNAS'
         autoOrderStatus = 'VERIFIED'
-        autoStatusNotes = `Lunas via ${paymentMethod} (${formatIDR(paidAmount)}${changeAmount > 0 ? `, Kembali: ${formatIDR(changeAmount)}` : ''})`
+        autoStatusNotes = `Lunas via ${paymentMethod} — Dibayar: ${formatIDR(paidAmount)}${changeAmount > 0 ? `, Kembali: ${formatIDR(changeAmount)}` : ''}`
       }
 
       const payload = {
@@ -247,7 +269,7 @@ export default function PosCashierTab({
           subtotal: c.subtotal,
         })),
         totalAmount: finalTotal,
-        paymentMethod,
+        paymentMethod: displayMethodForDB,
         paymentStatus: autoPaymentStatus,
         paidAmount,
         changeAmount: changeAmount > 0 ? changeAmount : 0,
@@ -550,186 +572,275 @@ export default function PosCashierTab({
               </div>
             </div>
 
-            {/* Payment Method Selector */}
+            {/* ===== PAYMENT MODE SELECTOR ===== */}
             <div>
-              <label className="text-[10px] text-gray-500 block mb-1">Metode Pembayaran:</label>
-              <div className="grid grid-cols-3 gap-1.5">
-                {(['Tunai', 'Transfer BCA', 'Transfer Mandiri', 'QRIS', 'Tempo B2B'] as const).map(
-                  (m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => {
-                        setPaymentMethod(m)
-                        if (m === 'Tempo B2B') {
-                          setPaymentStatus('TEMPO')
-                        } else {
-                          setPaymentStatus('LUNAS')
-                          if (paymentTypeOption === 'LUNAS') {
-                            setPaidAmountInput('')
-                          }
-                        }
-                      }}
-                      className={`px-2 py-1.5 rounded-lg text-[11px] font-semibold border transition-all text-center ${
-                        paymentMethod === m
-                          ? 'bg-[#8C6B24] text-white border-[#8C6B24]'
-                          : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
-                      }`}
-                    >
-                      {m}
-                    </button>
-                  )
-                )}
+              <label className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider block mb-1.5">
+                Mode Pembayaran:
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {(
+                  [
+                    { mode: 'LUNAS',    label: '✓ Lunas Penuh',      desc: 'Bayar semua sekarang',       color: 'emerald' },
+                    { mode: 'DP',       label: '★ DP / Cicilan',      desc: 'Sebagian bayar, sisa piutang', color: 'amber' },
+                    { mode: 'TEMPO',    label: '◷ Full Tempo',        desc: 'Semua ditangguhkan',          color: 'orange' },
+                    { mode: 'CAMPURAN', label: '⟳ Bayar + Tempo',    desc: 'Bayar item tertentu + sisanya tempo', color: 'blue' },
+                  ] as const
+                ).map(({ mode, label, desc, color }) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => {
+                      setPaymentMode(mode)
+                      setPaidAmountInput('')
+                      setPaymentStatus(mode === 'TEMPO' ? 'TEMPO' : 'LUNAS')
+                    }}
+                    className={`py-2 px-2.5 rounded-xl text-left border transition-all ${
+                      paymentMode === mode
+                        ? color === 'emerald'
+                          ? 'bg-emerald-700 text-white border-emerald-700'
+                          : color === 'amber'
+                          ? 'bg-amber-600 text-white border-amber-600'
+                          : color === 'orange'
+                          ? 'bg-orange-600 text-white border-orange-600'
+                          : 'bg-blue-700 text-white border-blue-700'
+                        : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="text-[11px] font-bold leading-tight">{label}</div>
+                    <div className={`text-[9px] leading-snug mt-0.5 ${paymentMode === mode ? 'opacity-80' : 'text-gray-400'}`}>
+                      {desc}
+                    </div>
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Payment Status & Calculation Container */}
-            {paymentMethod === 'Tempo B2B' ? (
-              <div className="space-y-1.5 bg-amber-50/70 p-3.5 rounded-xl border border-amber-200/80 text-xs">
-                <div className="font-bold text-amber-900 flex items-center justify-between">
-                  <span>Mode Tempo B2B (Faktur / Pay Later)</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-mono">
-                    Status: TEMPO
-                  </span>
-                </div>
-                <p className="text-[11px] text-amber-800 leading-relaxed">
-                  Pesanan diproses tanpa pembayaran di muka di meja kasir. Tagihan penuh sebesar{' '}
-                  <strong className="font-mono text-amber-950">{formatIDR(finalTotal)}</strong>{' '}
-                  akan dicatat sebagai piutang jatuh tempo sesuai perjanjian kemitraan.
-                </p>
-              </div>
-            ) : (
-              /* Untuk Tunai & Non-Tunai (Transfer / QRIS): Hanya Lunas atau DP */
-              <div className="space-y-2.5 bg-[#FAF8F5] p-3 rounded-xl border border-[#EAE4DC]">
-                {/* Toggle Pilihan: LUNAS PENUH vs DP (UANG MUKA) */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider">
-                      Status Pembayaran:
-                    </span>
-                    <span className="text-[10px] text-gray-400">
-                      {paymentMethod === 'Tunai' ? 'Tunai Fisik' : 'Non-Tunai / Digital'}
-                    </span>
+            {/* ===== PAYMENT DETAILS per MODE ===== */}
+            <div className="bg-[#FAF8F5] p-3.5 rounded-xl border border-[#EAE4DC] space-y-2.5 text-xs">
+
+              {/* MODE: TEMPO (full credit, no cash) */}
+              {paymentMode === 'TEMPO' && (
+                <div className="space-y-1.5">
+                  <div className="font-bold text-orange-800 flex items-center justify-between">
+                    <span>Full Tempo B2B — Tagihan Ditangguhkan</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-orange-100 text-orange-800 font-mono">TEMPO</span>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPaymentTypeOption('LUNAS')
-                        setPaidAmountInput('')
-                      }}
-                      className={`py-1.5 px-2 rounded-lg text-[11px] font-bold border transition-all flex items-center justify-center gap-1.5 ${
-                        paymentTypeOption === 'LUNAS'
-                          ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm'
-                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      <span>✓ Lunas Penuh</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPaymentTypeOption('DP')
-                        if (!paidAmountInput) {
-                          setPaidAmountInput(Math.round(finalTotal / 2).toString())
-                        }
-                      }}
-                      className={`py-1.5 px-2 rounded-lg text-[11px] font-bold border transition-all flex items-center justify-center gap-1.5 ${
-                        paymentTypeOption === 'DP'
-                          ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
-                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      <span>★ DP (Uang Muka)</span>
-                    </button>
-                  </div>
+                  <p className="text-[11px] text-orange-800 leading-relaxed">
+                    Seluruh tagihan <strong className="font-mono">{formatIDR(finalTotal)}</strong> ditangguhkan sebagai
+                    piutang jatuh tempo. Tidak ada pembayaran di meja kasir hari ini.
+                  </p>
                 </div>
+              )}
 
-                {/* Mode LUNAS with Tunai (opsional input uang diterima & hitung kembalian) */}
-                {paymentTypeOption === 'LUNAS' && paymentMethod === 'Tunai' && (
-                  <div className="space-y-2 pt-1 border-t border-gray-200">
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Uang Tunai Diterima:</span>
-                      <input
-                        type="number"
-                        placeholder={finalTotal.toString()}
-                        value={paidAmountInput}
-                        onChange={(e) => setPaidAmountInput(e.target.value)}
-                        className="w-32 px-2.5 py-1 rounded-lg bg-white border border-[#D8CEBE] text-right font-mono font-bold text-xs focus:outline-none focus:border-[#C59B47]"
-                      />
-                    </div>
+              {/* MODE: CAMPURAN (partial cash/transfer NOW + rest to Tempo) */}
+              {paymentMode === 'CAMPURAN' && (
+                <div className="space-y-2.5">
+                  <div className="font-bold text-blue-800 flex items-center justify-between">
+                    <span>Bayar Sebagian + Sisa Tempo B2B</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-mono">CAMPURAN</span>
+                  </div>
+                  <p className="text-[10px] text-blue-700">
+                    Contoh: order 3 menu, bayar menu 1 sekarang via transfer, menu 2 &amp; 3 masuk tempo/piutang.
+                  </p>
 
-                    <div className="flex gap-1.5 justify-end">
-                      {[finalTotal, 50000, 100000, 200000, 500000].map((pr, i) => (
+                  {/* Metode bayar untuk bagian yang dibayar sekarang */}
+                  <div>
+                    <label className="text-[10px] text-gray-500 block mb-1">Metode Bayar (untuk nominal sekarang):</label>
+                    <div className="grid grid-cols-2 gap-1">
+                      {(['Tunai', 'Transfer BCA', 'Transfer Mandiri', 'QRIS'] as const).map((m) => (
                         <button
-                          key={i}
+                          key={m}
                           type="button"
-                          onClick={() => handlePresetPay(pr)}
-                          className="px-2 py-0.5 rounded bg-white border border-gray-300 text-[10px] text-gray-600 hover:bg-gray-100 font-mono"
+                          onClick={() => setPaymentMethod(m)}
+                          className={`py-1 px-2 rounded-lg text-[10px] font-semibold border transition-all ${
+                            paymentMethod === m
+                              ? 'bg-blue-700 text-white border-blue-700'
+                              : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                          }`}
                         >
-                          {pr === finalTotal ? 'Pas' : pr >= 1000 ? `${pr / 1000}k` : pr}
+                          {m}
                         </button>
                       ))}
                     </div>
-
-                    {changeAmount > 0 ? (
-                      <div className="flex items-center justify-between font-mono font-bold text-xs text-emerald-800 pt-1">
-                        <span>Uang Kembalian:</span>
-                        <span>{formatIDR(changeAmount)}</span>
-                      </div>
-                    ) : (
-                      <div className="text-[10px] text-emerald-700 font-medium text-right pt-0.5">
-                        ✓ Uang Pas (Lunas)
-                      </div>
-                    )}
                   </div>
-                )}
 
-                {/* Mode LUNAS with Non-Tunai (Transfer / QRIS) */}
-                {paymentTypeOption === 'LUNAS' && paymentMethod !== 'Tunai' && (
-                  <div className="p-2.5 rounded-lg bg-emerald-50/80 border border-emerald-200/80 text-[11px] text-emerald-900 flex items-center justify-between">
-                    <div>
-                      <div className="font-bold">Lunas via {paymentMethod}</div>
-                      <div className="text-[10px] text-emerald-700">
-                        Dana transfer diterima penuh.
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Nominal Dibayar Sekarang ({paymentMethod}):</span>
+                    <input
+                      type="number"
+                      placeholder="Contoh: 72500"
+                      value={paidAmountInput}
+                      onChange={(e) => setPaidAmountInput(e.target.value)}
+                      className="w-32 px-2.5 py-1 rounded-lg bg-white border border-blue-300 text-right font-mono font-bold text-xs focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  {paidAmount > 0 && (
+                    <div className="pt-1 border-t border-gray-200 space-y-1">
+                      <div className="flex justify-between text-gray-600">
+                        <span>Total Tagihan:</span>
+                        <span className="font-mono font-bold">{formatIDR(finalTotal)}</span>
                       </div>
+                      <div className="flex justify-between text-emerald-700 font-semibold">
+                        <span>Dibayar sekarang ({paymentMethod}):</span>
+                        <span className="font-mono">{formatIDR(Math.min(paidAmount, finalTotal))}</span>
+                      </div>
+                      {paidAmount < finalTotal ? (
+                        <div className="flex justify-between font-bold text-orange-700 text-sm">
+                          <span>Masuk Tempo (Piutang):</span>
+                          <span className="font-mono">{formatIDR(shortfallAmount)}</span>
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-emerald-700 font-semibold text-right">
+                          ✓ Lunas penuh — tidak ada bagian tempo
+                        </div>
+                      )}
                     </div>
-                    <div className="font-mono font-bold text-emerald-800 text-sm">
-                      {formatIDR(finalTotal)}
+                  )}
+                </div>
+              )}
+
+              {/* MODE: DP (down payment / cicilan, sisa piutang biasa) */}
+              {paymentMode === 'DP' && (
+                <div className="space-y-2.5">
+                  <div className="font-bold text-amber-800 flex items-center justify-between">
+                    <span>DP / Cicilan — Sisa Jadi Piutang</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-mono">DP</span>
+                  </div>
+
+                  {/* Metode bayar DP */}
+                  <div>
+                    <label className="text-[10px] text-gray-500 block mb-1">Metode Bayar DP:</label>
+                    <div className="grid grid-cols-2 gap-1">
+                      {(['Tunai', 'Transfer BCA', 'Transfer Mandiri', 'QRIS'] as const).map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setPaymentMethod(m)}
+                          className={`py-1 px-2 rounded-lg text-[10px] font-semibold border transition-all ${
+                            paymentMethod === m
+                              ? 'bg-amber-600 text-white border-amber-600'
+                              : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                          }`}
+                        >
+                          {m}
+                        </button>
+                      ))}
                     </div>
                   </div>
-                )}
 
-                {/* Mode DP (Baik Tunai maupun Non-Tunai) */}
-                {paymentTypeOption === 'DP' && (
-                  <div className="space-y-2 pt-1 border-t border-gray-200">
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Nominal DP Diterima:</span>
-                      <input
-                        type="number"
-                        placeholder="Contoh: 50000"
-                        value={paidAmountInput}
-                        onChange={(e) => setPaidAmountInput(e.target.value)}
-                        className="w-32 px-2.5 py-1 rounded-lg bg-white border border-amber-400 text-right font-mono font-bold text-xs focus:outline-none focus:border-[#C59B47]"
-                      />
-                    </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Nominal DP Diterima:</span>
+                    <input
+                      type="number"
+                      placeholder="Contoh: 50000"
+                      value={paidAmountInput}
+                      onChange={(e) => setPaidAmountInput(e.target.value)}
+                      className="w-32 px-2.5 py-1 rounded-lg bg-white border border-amber-400 text-right font-mono font-bold text-xs focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
 
-                    <div className="pt-1 text-xs space-y-1">
-                      <div className="flex items-center justify-between text-gray-600">
+                  {paidAmount > 0 && (
+                    <div className="pt-1 border-t border-gray-200 space-y-1">
+                      <div className="flex justify-between text-emerald-700 font-semibold">
                         <span>DP Masuk ({paymentMethod}):</span>
-                        <span className="font-mono font-bold text-emerald-700">{formatIDR(paidAmount)}</span>
+                        <span className="font-mono">{formatIDR(Math.min(paidAmount, finalTotal))}</span>
                       </div>
-                      <div className="flex items-center justify-between font-bold text-amber-800">
-                        <span>Sisa Tagihan (Piutang):</span>
-                        <span className="font-mono text-sm">{formatIDR(shortfallAmount)}</span>
-                      </div>
+                      {paidAmount < finalTotal ? (
+                        <div className="flex justify-between font-bold text-amber-800">
+                          <span>Sisa Piutang (belum lunas):</span>
+                          <span className="font-mono text-sm">{formatIDR(shortfallAmount)}</span>
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-emerald-700 font-semibold text-right">
+                          ✓ Nominal melebihi tagihan — otomatis LUNAS
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* MODE: LUNAS (full payment now) */}
+              {paymentMode === 'LUNAS' && (
+                <div className="space-y-2.5">
+                  <div className="font-bold text-emerald-800 flex items-center justify-between">
+                    <span>Bayar Lunas Sekarang</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono">LUNAS</span>
+                  </div>
+
+                  {/* Metode bayar Lunas */}
+                  <div>
+                    <label className="text-[10px] text-gray-500 block mb-1">Metode Pembayaran:</label>
+                    <div className="grid grid-cols-2 gap-1">
+                      {(['Tunai', 'Transfer BCA', 'Transfer Mandiri', 'QRIS'] as const).map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => {
+                            setPaymentMethod(m)
+                            if (m !== 'Tunai') setPaidAmountInput('')
+                          }}
+                          className={`py-1 px-2 rounded-lg text-[10px] font-semibold border transition-all ${
+                            paymentMethod === m
+                              ? 'bg-emerald-700 text-white border-emerald-700'
+                              : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                          }`}
+                        >
+                          {m}
+                        </button>
+                      ))}
                     </div>
                   </div>
-                )}
-              </div>
-            )}
+
+                  {/* Input uang tunai (opsional, untuk hitung kembalian) */}
+                  {paymentMethod === 'Tunai' ? (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600">Uang Tunai Diterima:</span>
+                        <input
+                          type="number"
+                          placeholder={finalTotal.toString()}
+                          value={paidAmountInput}
+                          onChange={(e) => setPaidAmountInput(e.target.value)}
+                          className="w-32 px-2.5 py-1 rounded-lg bg-white border border-[#D8CEBE] text-right font-mono font-bold text-xs focus:outline-none focus:border-[#C59B47]"
+                        />
+                      </div>
+                      <div className="flex gap-1.5 justify-end">
+                        {[finalTotal, 50000, 100000, 200000, 500000].map((pr, i) => (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() => handlePresetPay(pr)}
+                            className="px-2 py-0.5 rounded bg-white border border-gray-300 text-[10px] text-gray-600 hover:bg-gray-100 font-mono"
+                          >
+                            {pr === finalTotal ? 'Pas' : pr >= 1000 ? `${pr / 1000}k` : pr}
+                          </button>
+                        ))}
+                      </div>
+                      {changeAmount > 0 ? (
+                        <div className="flex items-center justify-between font-mono font-bold text-xs text-emerald-800 pt-1">
+                          <span>Uang Kembalian:</span>
+                          <span>{formatIDR(changeAmount)}</span>
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-emerald-700 font-medium text-right pt-0.5">
+                          ✓ Uang Pas / Transfer Penuh
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-2.5 rounded-lg bg-emerald-50/80 border border-emerald-200/80 text-[11px] text-emerald-900 flex items-center justify-between">
+                      <div>
+                        <div className="font-bold">Lunas via {paymentMethod}</div>
+                        <div className="text-[10px] text-emerald-700">Dana diterima penuh.</div>
+                      </div>
+                      <div className="font-mono font-bold text-emerald-800 text-sm">{formatIDR(finalTotal)}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Submit Action Button */}
