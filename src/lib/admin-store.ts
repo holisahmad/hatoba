@@ -1,5 +1,6 @@
 import fs from 'fs/promises'
 import path from 'path'
+import os from 'os'
 import { CATALOG_PRODUCTS, ProductItem } from './catalog-data'
 
 export interface OrderItem {
@@ -50,10 +51,32 @@ export interface ActivityLog {
   metadata?: Record<string, unknown>
 }
 
-const DATA_DIR = path.join(process.cwd(), 'data')
+// In Vercel serverless environment, /var/task is read-only (EROFS).
+// Use os.tmpdir() (/tmp/hatoba-data) on Vercel or process.cwd()/data in local development.
+const DATA_DIR = process.env.VERCEL
+  ? path.join(os.tmpdir(), 'hatoba-data')
+  : path.join(process.cwd(), 'data')
+
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json')
 const PRODUCTS_FILE = path.join(DATA_DIR, 'products.json')
 const LOGS_FILE = path.join(DATA_DIR, 'activity_logs.json')
+
+// In-memory fallback caches for serverless lifecycle
+let cachedProducts: AdminProduct[] | null = null
+let cachedOrders: AdminOrder[] | null = null
+let cachedLogs: ActivityLog[] | null = null
+
+// Helper to safely write to filesystem without crashing on read-only environments
+async function safeWriteFile(filePath: string, content: string): Promise<boolean> {
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true })
+    await fs.writeFile(filePath, content, 'utf-8')
+    return true
+  } catch (err) {
+    console.warn(`[admin-store] Filesystem write skipped (${filePath}):`, (err as Error).message)
+    return false
+  }
+}
 
 // Sample Initial Orders
 const INITIAL_ORDERS: AdminOrder[] = [
@@ -171,19 +194,28 @@ const INITIAL_LOGS: ActivityLog[] = [
 ]
 
 async function ensureDataDirectory() {
-  await fs.mkdir(DATA_DIR, { recursive: true })
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true })
+  } catch {
+    // Safely ignore on read-only environments
+  }
 }
 
 // ==================== ORDERS STORE ====================
 export async function getAdminOrders(): Promise<AdminOrder[]> {
-  await ensureDataDirectory()
+  if (cachedOrders) {
+    return [...cachedOrders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  }
+
   try {
     const raw = await fs.readFile(ORDERS_FILE, 'utf-8')
     const list: AdminOrder[] = JSON.parse(raw)
+    cachedOrders = list
     return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
   } catch {
-    await fs.writeFile(ORDERS_FILE, JSON.stringify(INITIAL_ORDERS, null, 2), 'utf-8')
-    return INITIAL_ORDERS
+    cachedOrders = [...INITIAL_ORDERS]
+    await safeWriteFile(ORDERS_FILE, JSON.stringify(INITIAL_ORDERS, null, 2))
+    return cachedOrders
   }
 }
 
@@ -196,7 +228,8 @@ export async function addAdminOrder(order: Omit<AdminOrder, 'id' | 'createdAt' |
     status: order.status || 'PENDING',
   }
   orders.unshift(newOrder)
-  await fs.writeFile(ORDERS_FILE, JSON.stringify(orders, null, 2), 'utf-8')
+  cachedOrders = orders
+  await safeWriteFile(ORDERS_FILE, JSON.stringify(orders, null, 2))
 
   // Automatically record activity log
   await recordActivityLog({
@@ -229,7 +262,8 @@ export async function updateAdminOrderStatus(
     order.rejectedAt = new Date().toISOString()
   }
 
-  await fs.writeFile(ORDERS_FILE, JSON.stringify(orders, null, 2), 'utf-8')
+  cachedOrders = orders
+  await safeWriteFile(ORDERS_FILE, JSON.stringify(orders, null, 2))
 
   // Log action
   const actionType = newStatus === 'VERIFIED' ? 'ORDER_VERIFIED' : newStatus === 'REJECTED' ? 'ORDER_REJECTED' : 'ORDER_PENDING'
@@ -248,10 +282,14 @@ export async function updateAdminOrderStatus(
 
 // ==================== PRODUCTS / MENU STORE ====================
 export async function getAdminProducts(): Promise<AdminProduct[]> {
-  await ensureDataDirectory()
+  if (cachedProducts) {
+    return cachedProducts
+  }
+
   try {
     const raw = await fs.readFile(PRODUCTS_FILE, 'utf-8')
     const list: AdminProduct[] = JSON.parse(raw)
+    cachedProducts = list
     return list
   } catch {
     // Initialize from CATALOG_PRODUCTS
@@ -261,7 +299,8 @@ export async function getAdminProducts(): Promise<AdminProduct[]> {
       isAvailable: true,
       updatedAt: new Date().toISOString(),
     }))
-    await fs.writeFile(PRODUCTS_FILE, JSON.stringify(initial, null, 2), 'utf-8')
+    cachedProducts = initial
+    await safeWriteFile(PRODUCTS_FILE, JSON.stringify(initial, null, 2))
     return initial
   }
 }
@@ -279,7 +318,8 @@ export async function saveAdminProduct(productData: Partial<AdminProduct> & { na
         updatedAt: new Date().toISOString(),
       }
       products[index] = updated
-      await fs.writeFile(PRODUCTS_FILE, JSON.stringify(products, null, 2), 'utf-8')
+      cachedProducts = products
+      await safeWriteFile(PRODUCTS_FILE, JSON.stringify(products, null, 2))
 
       await recordActivityLog({
         action: 'MENU_UPDATED',
@@ -327,7 +367,8 @@ export async function saveAdminProduct(productData: Partial<AdminProduct> & { na
   }
 
   products.push(newProduct)
-  await fs.writeFile(PRODUCTS_FILE, JSON.stringify(products, null, 2), 'utf-8')
+  cachedProducts = products
+  await safeWriteFile(PRODUCTS_FILE, JSON.stringify(products, null, 2))
 
   await recordActivityLog({
     action: 'MENU_CREATED',
@@ -346,7 +387,8 @@ export async function deleteAdminProduct(productId: string): Promise<boolean> {
   if (!target) return false
 
   const filtered = products.filter((p) => p.id !== productId)
-  await fs.writeFile(PRODUCTS_FILE, JSON.stringify(filtered, null, 2), 'utf-8')
+  cachedProducts = filtered
+  await safeWriteFile(PRODUCTS_FILE, JSON.stringify(filtered, null, 2))
 
   await recordActivityLog({
     action: 'MENU_DELETED',
@@ -361,7 +403,10 @@ export async function deleteAdminProduct(productId: string): Promise<boolean> {
 
 // ==================== ACTIVITY LOGS (MAX 30 DAYS RETENTION) ====================
 export async function getActivityLogs(): Promise<ActivityLog[]> {
-  await ensureDataDirectory()
+  if (cachedLogs) {
+    return [...cachedLogs].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+  }
+
   try {
     const raw = await fs.readFile(LOGS_FILE, 'utf-8')
     const list: ActivityLog[] = JSON.parse(raw)
@@ -371,13 +416,15 @@ export async function getActivityLogs(): Promise<ActivityLog[]> {
     const validLogs = list.filter((l) => new Date(l.timestamp).getTime() >= thirtyDaysAgo)
 
     if (validLogs.length !== list.length) {
-      await fs.writeFile(LOGS_FILE, JSON.stringify(validLogs, null, 2), 'utf-8')
+      await safeWriteFile(LOGS_FILE, JSON.stringify(validLogs, null, 2))
     }
 
+    cachedLogs = validLogs
     return validLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
   } catch {
-    await fs.writeFile(LOGS_FILE, JSON.stringify(INITIAL_LOGS, null, 2), 'utf-8')
-    return INITIAL_LOGS
+    cachedLogs = [...INITIAL_LOGS]
+    await safeWriteFile(LOGS_FILE, JSON.stringify(INITIAL_LOGS, null, 2))
+    return cachedLogs
   }
 }
 
@@ -395,7 +442,8 @@ export async function recordActivityLog(logData: Omit<ActivityLog, 'id' | 'times
   const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
   const pruned = logs.filter((l) => new Date(l.timestamp).getTime() >= thirtyDaysAgo)
 
-  await fs.writeFile(LOGS_FILE, JSON.stringify(pruned, null, 2), 'utf-8')
+  cachedLogs = pruned
+  await safeWriteFile(LOGS_FILE, JSON.stringify(pruned, null, 2))
   return newLog
 }
 
