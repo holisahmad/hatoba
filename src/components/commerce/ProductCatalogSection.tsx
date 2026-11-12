@@ -137,7 +137,7 @@ export default function ProductCatalogSection() {
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full border border-[#C59B47] text-[#8C6B24] hover:text-[#111613] hover:bg-white bg-white/80 text-xs font-semibold transition-all shadow-sm"
             >
               <FileText className="w-4 h-4 text-[#8C6B24]" />
-              <span>Unduh Brosur Emas (PDF)</span>
+              <span>Unduh Katalog Produk (PDF)</span>
             </a>
             <Link
               href="/frozen-food"

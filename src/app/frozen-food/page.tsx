@@ -171,7 +171,7 @@ export default function FrozenFoodPage() {
               className="inline-flex items-center gap-2 text-xs font-semibold text-[#8C6B24] bg-white border border-[#D8CEBE] px-4 py-2.5 rounded-full hover:bg-[#FBF9F5] transition-colors shadow-sm"
             >
               <FileText className="w-4 h-4 text-[#8C6B24]" />
-              <span>Unduh Brosur Emas (PDF)</span>
+              <span>Unduh Katalog Produk (PDF)</span>
             </a>
           </div>
         </div>

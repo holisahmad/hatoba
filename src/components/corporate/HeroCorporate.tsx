@@ -59,7 +59,7 @@ export default function HeroCorporate() {
                 className="inline-flex items-center justify-center gap-2.5 px-8 py-4 rounded-full font-semibold text-[#8C6B24] hover:text-[#111613] border border-[#C59B47] hover:border-[#8C6B24] hover:bg-[#F2ECE1] transition-all duration-300 bg-white/80 shadow-sm text-sm tracking-wide"
               >
                 <Download className="w-4 h-4" />
-                <span>Unduh Company Profile (PDF)</span>
+                <span>Unduh Katalog Produk (PDF)</span>
               </a>
             </div>
 
