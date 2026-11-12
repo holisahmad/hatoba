@@ -47,23 +47,42 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
     window.print()
   }
 
-  // Export invoice DOM to PNG image file
+  // Export invoice / receipt DOM to PNG image file
   const handleDownloadImage = async () => {
     if (!invoiceContainerRef.current) return
     setIsExportingImage(true)
 
     try {
-      // Small delay to ensure rendering
-      await new Promise((r) => setTimeout(r, 100))
+      // Small delay to ensure any layout/fonts are settled
+      await new Promise((r) => setTimeout(r, 150))
 
-      const dataUrl = await toPng(invoiceContainerRef.current, {
+      const node = invoiceContainerRef.current
+      const rect = node.getBoundingClientRect()
+
+      const dataUrl = await toPng(node, {
         quality: 0.98,
         pixelRatio: 2, // High resolution for crystal clear mobile sharing
         backgroundColor: '#ffffff',
+        width: rect.width,
+        height: rect.height,
+        style: {
+          margin: '0',
+          left: '0',
+          top: '0',
+          transform: 'none',
+          position: 'static',
+        },
       })
 
+      const prefix =
+        printMode === 'thermal'
+          ? 'Struk-Kasir'
+          : printMode === 'surat_jalan'
+          ? 'Surat-Jalan'
+          : 'Invoice'
+
       const link = document.createElement('a')
-      const fileName = `Invoice-${order.referenceCode}-${order.customerName.replace(/[^a-zA-Z0-9]/g, '_')}.png`
+      const fileName = `${prefix}-${order.referenceCode}-${(order.customerName || 'Pelanggan').replace(/[^a-zA-Z0-9]/g, '_')}.png`
       link.download = fileName
       link.href = dataUrl
       link.click()
@@ -71,8 +90,8 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
       setDownloadSuccess(true)
       setTimeout(() => setDownloadSuccess(false), 3000)
     } catch (err) {
-      console.error('Failed to export invoice image:', err)
-      alert('Gagal membuat gambar invoice. Silakan gunakan tombol Cetak.')
+      console.error('Failed to export image:', err)
+      alert('Gagal membuat gambar. Silakan gunakan tombol Cetak.')
     } finally {
       setIsExportingImage(false)
     }
@@ -481,64 +500,66 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
           {/* MODE 2: NOTA THERMAL KASIR (58/80mm)                                      */}
           {/* ========================================================================= */}
           {printMode === 'thermal' && (
-            <div
-              ref={invoiceContainerRef}
-              className="max-w-[340px] mx-auto font-mono text-xs text-[#111613] p-4 border border-dashed border-gray-300 rounded-xl bg-[#FCFAF7] print:border-none print:p-0 print:max-w-none"
-            >
-              <div className="text-center space-y-1 pb-3 border-b border-dashed border-gray-400">
-                <div className="font-bold text-base tracking-wider">HATOBA FROZEN FOOD</div>
-                <div className="text-[10px] text-gray-600">Jeroan &amp; Daging Sapi Berkualitas Higienis</div>
-                <div className="text-[10px] text-gray-500">
-                  Hub {order.hubArea} · WA: 0821-7368-358
+            <div className="w-full flex justify-center py-2">
+              <div
+                ref={invoiceContainerRef}
+                style={{ margin: 0 }}
+                className="w-[340px] max-w-full font-mono text-xs text-[#111613] p-5 border border-dashed border-gray-400 rounded-2xl bg-[#FCFAF7] print:border-none print:p-0 print:w-full print:max-w-none shadow-sm"
+              >
+                <div className="text-center space-y-1 pb-3 border-b border-dashed border-gray-400">
+                  <div className="font-bold text-base tracking-wider">HATOBA FROZEN FOOD</div>
+                  <div className="text-[10px] text-gray-600">Jeroan &amp; Daging Sapi Berkualitas Higienis</div>
+                  <div className="text-[10px] text-gray-500">
+                    Hub {order.hubArea} · WA: 0821-7368-358
+                  </div>
+                  {/* Stamp Thermal */}
+                  <div className="pt-1">
+                    <span
+                      className={`inline-block px-2.5 py-0.5 text-[10px] font-bold rounded border ${
+                        isPaid
+                          ? 'border-emerald-600 text-emerald-800 bg-emerald-50'
+                          : isDP
+                          ? 'border-amber-600 text-amber-800 bg-amber-50'
+                          : 'border-gray-500 text-gray-700 bg-gray-50'
+                      }`}
+                    >
+                      *** {isPaid ? 'LUNAS / PAID' : isDP ? 'DP DITERIMA' : 'TAGIHAN / UNPAID'} ***
+                    </span>
+                  </div>
                 </div>
-                {/* Stamp Thermal */}
-                <div className="pt-1">
-                  <span
-                    className={`inline-block px-2 py-0.5 text-[10px] font-bold rounded border ${
-                      isPaid
-                        ? 'border-emerald-600 text-emerald-800'
-                        : isDP
-                        ? 'border-amber-600 text-amber-800'
-                        : 'border-gray-500 text-gray-700'
-                    }`}
-                  >
-                    *** {isPaid ? 'LUNAS / PAID' : isDP ? 'DP DITERIMA' : 'TAGIHAN / UNPAID'} ***
-                  </span>
-                </div>
-              </div>
 
-              <div className="py-2.5 text-[11px] space-y-1 border-b border-dashed border-gray-300">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">No. Ref:</span>
-                  <span className="font-bold">{order.referenceCode}</span>
+                <div className="py-2.5 text-[11px] space-y-1 border-b border-dashed border-gray-300">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">No. Ref:</span>
+                    <span className="font-bold">{order.referenceCode}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Waktu:</span>
+                    <span>
+                      {new Date(order.createdAt).toLocaleDateString('id-ID', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-start">
+                    <span className="text-gray-500">Pelanggan:</span>
+                    <span className="font-semibold text-right max-w-[190px] break-words">
+                      {order.customerName} {order.businessName ? `(${order.businessName})` : ''}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Kota / Hub:</span>
+                    <span>{order.city} ({order.hubArea})</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Kasir:</span>
+                    <span>{order.source || 'POS Kasir'}</span>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Waktu:</span>
-                  <span>
-                    {new Date(order.createdAt).toLocaleDateString('id-ID', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Pelanggan:</span>
-                  <span className="font-semibold text-right max-w-[180px] truncate">
-                    {order.customerName} {order.businessName ? `(${order.businessName})` : ''}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Kota / Hub:</span>
-                  <span>{order.city} ({order.hubArea})</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Kasir:</span>
-                  <span>{order.source || 'POS Kasir'}</span>
-                </div>
-              </div>
 
               <div className="py-3 border-b border-dashed border-gray-400 space-y-2">
                 {order.items.map((it, idx) => (
@@ -591,7 +612,8 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
                 <div className="text-[9px]">hatoba-six.vercel.app</div>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
           {/* ========================================================================= */}
           {/* MODE 3: SURAT JALAN / DELIVERY ORDER (A4 / COLD CHAIN)                    */}
