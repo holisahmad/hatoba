@@ -485,3 +485,78 @@ export const CORPORATE_CONTACT = {
   },
 }
 
+// Verified Partner Clients & Culinary Businesses
+export interface PartnerClient {
+  id: string
+  name: string
+  category: string
+  type: string
+  badge: string
+}
+
+export const PARTNER_CLIENTS: PartnerClient[] = [
+  {
+    id: 'rm-mertamu',
+    name: 'RM Mertamu',
+    category: 'Rumah Makan & Masakan Nusantara',
+    type: 'Rumah Makan',
+    badge: 'Mitra Aktif',
+  },
+  {
+    id: 'puji-lestari',
+    name: 'Puji Lestari',
+    category: 'Katering & Rumah Makan',
+    type: 'Katering & Resto',
+    badge: 'Mitra Aktif',
+  },
+  {
+    id: 'capry-food',
+    name: 'Capry Food',
+    category: 'Food Service & Pengolahan Pangan',
+    type: 'Food Service',
+    badge: 'Mitra Aktif',
+  },
+  {
+    id: 'bakso-mie-ayam-syifa',
+    name: 'Bakso dan Mie Ayam Syifa',
+    category: 'Spesialis Bakso & Mie Ayam',
+    type: 'Kuliner Spesialis',
+    badge: 'Mitra Aktif',
+  },
+  {
+    id: 'rm-bagelen',
+    name: 'RM Bagelen',
+    category: 'Rumah Makan Tradisional',
+    type: 'Rumah Makan',
+    badge: 'Mitra Aktif',
+  },
+  {
+    id: 'bebakaran-rimasari',
+    name: 'Bebakaran Rimasari',
+    category: 'Spesialis Masakan Bakaran & Olahan',
+    type: 'Resto Bebakaran',
+    badge: 'Mitra Aktif',
+  },
+  {
+    id: 'toko-mimilizious',
+    name: 'Toko Mimilizious',
+    category: 'Ritel Pangan & Reseller Frozen Food',
+    type: 'Ritel & Reseller',
+    badge: 'Mitra Aktif',
+  },
+  {
+    id: 'amarya-collections',
+    name: 'Amarya Collections',
+    category: 'Mitra Usaha & Distribusi Pangan',
+    type: 'Mitra Usaha',
+    badge: 'Mitra Aktif',
+  },
+  {
+    id: 'sego-saduk',
+    name: 'Sego Saduk',
+    category: 'Kuliner Nasi Khas Nusantara',
+    type: 'Kuliner Nusantara',
+    badge: 'Mitra Aktif',
+  },
+]
+

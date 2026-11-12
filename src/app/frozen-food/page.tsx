@@ -22,6 +22,7 @@ import {
   FOOTPRINT_LOCATIONS,
 } from '@/lib/catalog-data'
 import ProductCard from '@/components/commerce/ProductCard'
+import PartnerShowcase from '@/components/corporate/PartnerShowcase'
 import { getStoredAttribution } from '@/lib/attribution'
 
 export default function FrozenFoodPage() {
@@ -183,6 +184,9 @@ export default function FrozenFoodPage() {
           ))}
         </div>
       </section>
+
+      {/* Verified Partner Clients Section */}
+      <PartnerShowcase />
 
       {/* Raw Materials Consultation Section (`RAW_INQUIRY`) */}
       <section id="bahan-mentah" className="bg-[#F7F4EE] text-[#111613] py-20 mt-12 border-t border-[#EAE4DC]">

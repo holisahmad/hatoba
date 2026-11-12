@@ -6,6 +6,7 @@ import StrategicRoadmap from '@/components/corporate/StrategicRoadmap'
 import SynergyPillars from '@/components/corporate/SynergyPillars'
 import SmartInquiryForm from '@/components/corporate/SmartInquiryForm'
 import ProductCatalogSection from '@/components/commerce/ProductCatalogSection'
+import PartnerShowcase from '@/components/corporate/PartnerShowcase'
 import AttributionTracker from '@/components/analytics/AttributionTracker'
 
 export default function HomePage() {
@@ -28,6 +29,9 @@ export default function HomePage() {
 
       {/* 5. Keunggulan Sinergi Grup (Why Partner With HATOBA Group) */}
       <SynergyPillars />
+
+      {/* 6. Jejak Kemitraan & Kepercayaan Dapur Kuliner */}
+      <PartnerShowcase />
 
       {/* Commercial Showcase: Katalog Produk B2B HATOBA Frozen Food */}
       <ProductCatalogSection />
