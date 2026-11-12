@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { CATALOG_PRODUCTS } from '@/lib/catalog-data'
 import { generateReferenceCode, formatFixedOrderWhatsApp, FixedOrderItem } from '@/lib/whatsapp'
+import { addAdminOrder } from '@/lib/admin-store'
 
 export async function POST(request: Request) {
   try {
@@ -71,6 +72,22 @@ export async function POST(request: Request) {
     }
 
     const whatsappUrl = formatFixedOrderWhatsApp(finalOrder)
+
+    // Store order into admin database & log activity
+    await addAdminOrder({
+      referenceCode,
+      customerName: finalOrder.customerName,
+      businessName: finalOrder.businessName,
+      businessType: finalOrder.businessType,
+      phone: finalOrder.phone,
+      hubArea: finalOrder.hubArea,
+      city: finalOrder.city,
+      marketingName: (order.marketingName || attribution?.marketingName || attribution?.utm_campaign || '') as string,
+      notes: finalOrder.notes,
+      items: finalOrder.items,
+      totalAmount: finalOrder.totalAmount,
+      status: 'PENDING',
+    })
 
     console.log('[ORDER LOGGED BEFORE WHATSAPP]', {
       referenceCode,

@@ -225,6 +225,9 @@ export default function Footer() {
             <Link href="/frozen-food" className="text-gold hover:underline">
               Katalog B2B HATOBA
             </Link>
+            <Link href="/admin" className="hover:text-gold transition-colors">
+              Panel Admin
+            </Link>
           </div>
         </div>
       </div>

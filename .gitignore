@@ -2,6 +2,10 @@
 asset/
 asset/**
 
+# Local data storage
+data/*.json
+!data/.gitkeep
+
 # Dependencies
 /node_modules
 /.pnp

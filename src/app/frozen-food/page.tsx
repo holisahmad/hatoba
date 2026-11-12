@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import {
@@ -25,7 +25,19 @@ import ProductCard from '@/components/commerce/ProductCard'
 import { getStoredAttribution } from '@/lib/attribution'
 
 export default function FrozenFoodPage() {
+  const [products, setProducts] = useState(CATALOG_PRODUCTS)
   const [selectedRaw, setSelectedRaw] = useState(RAW_PRODUCTS[0].name)
+
+  useEffect(() => {
+    fetch('/api/admin/products')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.products && Array.isArray(data.products) && data.products.length > 0) {
+          setProducts(data.products.filter((p: any) => p.isAvailable !== false))
+        }
+      })
+      .catch(() => {})
+  }, [])
   const [rawName, setRawName] = useState('')
   const [rawPhone, setRawPhone] = useState('')
   const [rawBusinessType, setRawBusinessType] = useState('Restoran / Rumah Makan')
@@ -166,7 +178,7 @@ export default function FrozenFoodPage() {
 
         {/* 5 Certified Products Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-          {CATALOG_PRODUCTS.map((prod) => (
+          {products.map((prod) => (
             <ProductCard key={prod.id} product={prod} />
           ))}
         </div>

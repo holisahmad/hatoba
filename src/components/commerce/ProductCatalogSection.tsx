@@ -1,15 +1,27 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Snowflake, ShieldCheck, FileText, ArrowRight } from 'lucide-react'
-import { CATALOG_PRODUCTS, CORPORATE_CONTACT } from '@/lib/catalog-data'
+import { CATALOG_PRODUCTS, CORPORATE_CONTACT, ProductItem } from '@/lib/catalog-data'
 import ProductCard from './ProductCard'
 
 export default function ProductCatalogSection() {
   const [filter, setFilter] = useState<'ALL' | 'JEROAN' | 'IGA' | 'MIX'>('ALL')
+  const [products, setProducts] = useState<ProductItem[]>(CATALOG_PRODUCTS)
 
-  const filteredProducts = CATALOG_PRODUCTS.filter((prod) => {
+  useEffect(() => {
+    fetch('/api/admin/products')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.products && Array.isArray(data.products) && data.products.length > 0) {
+          setProducts(data.products.filter((p: any) => p.isAvailable !== false))
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  const filteredProducts = products.filter((prod) => {
     if (filter === 'JEROAN') return prod.id === 'babat-sapi' || prod.id === 'iso-sapi' || prod.id === 'paru-sapi'
     if (filter === 'IGA') return prod.id === 'iga-sapi'
     if (filter === 'MIX') return prod.id === 'mix-4-lauk'
