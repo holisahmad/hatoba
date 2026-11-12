@@ -11,10 +11,22 @@ async function checkAuth(): Promise<boolean> {
   return cookieStore.get('hatoba_admin_session')?.value === 'authenticated'
 }
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 // GET all products
 export async function GET() {
   const products = await getAdminProducts()
-  return NextResponse.json({ success: true, products })
+  return NextResponse.json(
+    { success: true, products },
+    {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        Pragma: 'no-cache',
+        Expires: '0',
+      },
+    }
+  )
 }
 
 // POST create or edit product
