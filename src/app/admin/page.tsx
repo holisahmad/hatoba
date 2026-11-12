@@ -343,7 +343,7 @@ export default function AdminPage() {
   // 2. Login Screen
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-[#FBF9F5] flex items-center justify-center p-4">
+      <div className="min-h-screen bg-[#FBF9F5] flex items-center justify-center p-4 pt-24 sm:pt-32 pb-12">
         <div className="max-w-md w-full bg-white rounded-3xl p-8 sm:p-10 border border-[#E8DFD5] shadow-xl shadow-stone-200/60 text-[#111613]">
           <div className="text-center space-y-3 mb-8">
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#FAF6F0] border border-[#E2D6C5] mb-1">
@@ -410,9 +410,9 @@ export default function AdminPage() {
 
   // 3. Authenticated Dashboard UI
   return (
-    <div className="min-h-screen bg-[#FBF9F5] text-[#111613] pb-20">
+    <div className="min-h-screen bg-[#FBF9F5] text-[#111613] pb-20 pt-20 sm:pt-24 lg:pt-28">
       {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-[#EAE4DC] px-4 sm:px-8 py-3.5">
+      <header className="sticky top-[64px] sm:top-[74px] lg:top-[80px] z-40 bg-white/95 backdrop-blur-md border-b border-[#EAE4DC] px-4 sm:px-8 py-3.5 shadow-sm">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Link href="/" className="flex items-center gap-2.5 group">
@@ -1190,7 +1190,7 @@ export default function AdminPage() {
 
       {/* ======================= MODAL: REJECT / NOTE PROMPT ======================= */}
       {updatingOrderId && pendingStatusAction && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="max-w-md w-full bg-white rounded-3xl p-6 border border-[#E8DFD5] shadow-2xl space-y-4">
             <h4 className="font-serif-title text-lg font-bold text-[#111613]">
               {pendingStatusAction === 'REJECTED' ? 'Tolak Pesanan Ini?' : 'Alasan Perubahan Status'}
@@ -1235,7 +1235,7 @@ export default function AdminPage() {
 
       {/* ======================= MODAL: CRUD MENU (ADD / EDIT) ======================= */}
       {isMenuModalOpen && editingProduct && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="max-w-2xl w-full bg-white rounded-3xl p-6 sm:p-8 border border-[#E8DFD5] shadow-2xl my-8 space-y-6">
             <div className="flex items-center justify-between border-b border-gray-100 pb-4">
               <div>
@@ -1503,7 +1503,7 @@ export default function AdminPage() {
 
       {/* ======================= MODAL / PRINT SHEET: CETAK NOTA ======================= */}
       {selectedOrderForPrint && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="max-w-lg w-full bg-white rounded-3xl p-6 sm:p-8 border border-gray-200 shadow-2xl space-y-6 text-[#111613]">
             {/* Header Nota */}
             <div className="flex items-center justify-between border-b border-gray-200 pb-4">
