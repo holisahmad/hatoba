@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { CATALOG_PRODUCTS } from '@/lib/catalog-data'
 import { generateReferenceCode, formatFixedOrderWhatsApp, FixedOrderItem } from '@/lib/whatsapp'
-import { addAdminOrder } from '@/lib/admin-store'
+import { addAdminOrder, getAdminProducts } from '@/lib/admin-store'
 
 export async function POST(request: Request) {
   try {
@@ -15,12 +15,16 @@ export async function POST(request: Request) {
       )
     }
 
+    // Dynamic products from database with fallback to CATALOG_PRODUCTS
+    const dbProducts = await getAdminProducts()
+    const allProducts = dbProducts && dbProducts.length > 0 ? dbProducts : CATALOG_PRODUCTS
+
     // Server-side price and variant re-validation
     const validatedItems: FixedOrderItem[] = []
     let computedTotal = 0
 
     for (const clientItem of order.items) {
-      const product = CATALOG_PRODUCTS.find((p) => p.id === clientItem.productId)
+      const product = allProducts.find((p) => p.id === clientItem.productId) || CATALOG_PRODUCTS.find((p) => p.id === clientItem.productId)
       if (!product) {
         return NextResponse.json(
           { error: `Produk ID ${clientItem.productId} tidak valid.` },
