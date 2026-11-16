@@ -52,6 +52,11 @@ import {
   PackageCheck,
   Thermometer,
   PhoneCall,
+  Search,
+  GraduationCap,
+  BookMarked,
+  UserCheck,
+  ListOrdered,
 } from 'lucide-react'
 import {
   FinanceTransaction,
@@ -126,6 +131,11 @@ export default function FinanceERPPage() {
     | 'goods_receipt'
     | 'help'
   const [activeTab, setActiveTab] = useState<FinanceTab>('overview')
+
+  // Sub-tab State untuk Menu Help & Dokumentasi Interaktif
+  type HelpSubTab = 'user_manual' | 'reading_reports' | 'coa_accounting' | 'inventory_grn' | 'credit_tax_security'
+  const [helpSubTab, setHelpSubTab] = useState<HelpSubTab>('user_manual')
+  const [helpSearchQuery, setHelpSearchQuery] = useState('')
 
   // Form State: Tambah Transaksi Kas/Bank
   const [showAddTxModal, setShowAddTxModal] = useState(false)
@@ -3689,128 +3699,664 @@ export default function FinanceERPPage() {
           )}
           {activeTab === 'help' && (
             <div className="space-y-6">
-              <div className="p-6 sm:p-8 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-6">
-                <div className="border-b border-gray-100 pb-4">
-                  <div className="flex items-center gap-2 text-[#C59B47] mb-1">
-                    <HelpCircle className="w-5 h-5" />
-                    <span className="text-xs uppercase font-bold tracking-wider">Pusat Bantuan &amp; Tata Kelola</span>
+              {/* Header Banner Dokumentasi */}
+              <div className="p-6 sm:p-8 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 pb-5">
+                  <div>
+                    <div className="flex items-center gap-2 text-[#8C6B24] mb-1.5">
+                      <div className="w-7 h-7 rounded-lg bg-[#FAF6EE] border border-[#E2D6C5] flex items-center justify-center">
+                        <GraduationCap className="w-4 h-4 text-[#8C6B24]" />
+                      </div>
+                      <span className="text-[11px] uppercase font-bold tracking-wider">
+                        Pusat Panduan &amp; Standar Operasional Prosedur (SOP)
+                      </span>
+                    </div>
+                    <h2 className="font-serif-title text-2xl sm:text-3xl font-bold text-[#111613]">
+                      Buku Manual Penggunaan Sistem &amp; Panduan Akuntansi
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-1 max-w-2xl">
+                      Pedoman kerja resmi untuk staf kasir, tim gudang cold storage, manajer operasional, dan tim akuntansi HATOBA Group sesuai standar SAK EMKM Indonesia.
+                    </p>
                   </div>
-                  <h2 className="font-serif-title text-2xl font-bold text-[#111613]">
-                    Panduan Penggunaan Mini ERP &amp; Kebijakan Keuangan HATOBA
-                  </h2>
-                  <p className="text-xs text-gray-500 mt-1">
-                    SOP Praktis untuk Pemilik, Kasir, dan Tim Finance tanpa latar belakang akuntansi rumit.
-                  </p>
+
+                  {/* Navigasi Cepat Tab Standar */}
+                  <div className="flex items-center gap-2 self-start md:self-auto">
+                    <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">
+                      Standar SAK EMKM 2026
+                    </span>
+                    <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200 font-bold">
+                      Cold Chain −18°C
+                    </span>
+                  </div>
                 </div>
 
-                {/* Accordion / Content Cards */}
-                <div className="space-y-6 text-xs leading-relaxed text-gray-700">
-                  {/* 1. SOP Rekonsiliasi Tutup Kasir */}
-                  <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-3">
-                    <h3 className="font-bold text-sm text-[#111613] flex items-center gap-2">
-                      <CheckCheck className="w-4 h-4 text-emerald-600" />
-                      <span>1. SOP Harian Tutup Kasir &amp; Validasi Mutasi Bank</span>
-                    </h3>
-                    <p>
-                      Setiap pergantian shift atau tutup toko (cut-off malam pukul 21:00 WIB), kasir wajib membuka tab <strong>Tutup Kasir &amp; Bank</strong>:
-                    </p>
-                    <ul className="list-disc pl-5 space-y-1 text-gray-600">
-                      <li><strong>Hitung Uang Fisik di Laci:</strong> Hitung seluruh uang kertas dan koin tanpa melihat angka sistem terlebih dahulu. Masukkan ke kolom <em>Jumlah Fisik Uang di Laci Dihitung</em>.</li>
-                      <li><strong>Cek Mutasi Rekening Bank Mandiri:</strong> Buka mobile banking / internet banking, cek total transfer masuk dari konsumen hari ini, masukkan ke kolom <em>Total Transfer Valid di Rekening Koran</em>.</li>
-                      <li><strong>Perlakuan Selisih Kasir:</strong> Jika fisik kurang, pilih <em>Beban Perusahaan</em> (Akun 608) jika dalam batas toleransi receh, atau <em>Potong Kasir</em> jika ada kelalaian kasir. Jika fisik lebih, pilih <em>Pendapatan Lain-lain</em> (Akun 403).</li>
-                      <li>Sistem otomatis membuat jurnal penyesuaian selisih kas tanpa kasir pusing hitung debit/kredit manual.</li>
-                    </ul>
-                  </div>
+                {/* Sub-Tabs Navigasi User Manual */}
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 scrollbar-none">
+                  <button
+                    type="button"
+                    onClick={() => setHelpSubTab('user_manual')}
+                    className={`px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+                      helpSubTab === 'user_manual'
+                        ? 'bg-gradient-to-r from-[#C59B47] to-[#A47F33] text-[#111613] shadow-sm'
+                        : 'bg-[#FAF8F5] text-gray-700 hover:bg-[#F2ECE1] border border-[#EAE4DC]'
+                    }`}
+                  >
+                    <UserCheck className="w-3.5 h-3.5" />
+                    <span>1. Alur Kasir &amp; Training Baru</span>
+                  </button>
 
-                  {/* 2. Kebijakan Cut-off & Piutang Tempo */}
-                  <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-3">
-                    <h3 className="font-bold text-sm text-[#111613] flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-amber-600" />
-                      <span>2. Kebijakan Cut-off &amp; Penagihan Piutang Tempo (Kunci Mengatasi Kas Kosong)</span>
-                    </h3>
-                    <p>
-                      Masalah utama HATOBA adalah modal kerja tersandera di konsumen resto/warung yang bayar tempo. Kebijakan tegas yang wajib diterapkan:
-                    </p>
-                    <ul className="list-disc pl-5 space-y-1 text-gray-600">
-                      <li><strong>Batas Tempo Maksimal 3 Hari:</strong> Tagihan tempo hanya diberikan untuk konsumen B2B terverifikasi dengan jatuh tempo maksimal 3 hari kalender.</li>
-                      <li><strong>Lock Order Jika Ada Tagihan Lewat Tempo:</strong> Jangan pernah mengirim pesanan baru jika invoice sebelumnya belum lunas (lihat alert merah di tab Ringkasan).</li>
-                      <li><strong>Plafon Piutang Konsumen:</strong> Tiap warung makan memiliki limit piutang maksimal (misal Rp 3.000.000). Jika melewati plafon, pesanan berikutnya wajib TUNAI atau TRANSFER sebelum barang dikirim dari freezer.</li>
-                    </ul>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setHelpSubTab('reading_reports')}
+                    className={`px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+                      helpSubTab === 'reading_reports'
+                        ? 'bg-gradient-to-r from-[#C59B47] to-[#A47F33] text-[#111613] shadow-sm'
+                        : 'bg-[#FAF8F5] text-gray-700 hover:bg-[#F2ECE1] border border-[#EAE4DC]'
+                    }`}
+                  >
+                    <PieChart className="w-3.5 h-3.5" />
+                    <span>2. Cara Baca Laporan Keuangan</span>
+                  </button>
 
-                  {/* 3. Pembagian Margin Kotor Daging Cold Chain */}
-                  <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-3">
-                    <h3 className="font-bold text-sm text-[#111613] flex items-center gap-2">
-                      <PieChart className="w-4 h-4 text-[#C59B47]" />
-                      <span>3. Rekomendasi Alokasi Margin Kotor (Penjualan - HPP Daging)</span>
-                    </h3>
-                    <p>
-                      Dalam bisnis cold chain daging sapi, <em>Margin Kotor</em> (Rp Omzet - Rp Beli Sapi/Jeroan) jangan langsung dianggap laba bersih. Alokasi ideal HATOBA:
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-2 text-center">
-                      <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
-                        <div className="text-base font-bold text-emerald-800">60%</div>
-                        <div className="font-semibold text-gray-700 text-[11px] mt-0.5">Modal Putar Restock</div>
-                        <p className="text-[10px] text-gray-500 mt-1">Uang aman untuk kulakan daging berikutnya di RPH.</p>
-                      </div>
-                      <div className="p-3 rounded-xl bg-blue-50 border border-blue-200">
-                        <div className="text-base font-bold text-blue-800">20%</div>
-                        <div className="font-semibold text-gray-700 text-[11px] mt-0.5">Listrik &amp; Operasional</div>
-                        <p className="text-[10px] text-gray-500 mt-1">Biaya PLN Freezer -18°C, plastik vacuum, kurir.</p>
-                      </div>
-                      <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
-                        <div className="text-base font-bold text-amber-800">10%</div>
-                        <div className="font-semibold text-gray-700 text-[11px] mt-0.5">Dana Cadangan Mesin</div>
-                        <p className="text-[10px] text-gray-500 mt-1">Service kompresor, genset, fluktuasi harga sapi.</p>
-                      </div>
-                      <div className="p-3 rounded-xl bg-purple-50 border border-purple-200">
-                        <div className="text-base font-bold text-purple-800">10%</div>
-                        <div className="font-semibold text-gray-700 text-[11px] mt-0.5">Laba Bersih / Simpanan</div>
-                        <p className="text-[10px] text-gray-500 mt-1">Keuntungan bersih pemilik untuk tabungan usaha.</p>
-                      </div>
-                    </div>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setHelpSubTab('coa_accounting')}
+                    className={`px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+                      helpSubTab === 'coa_accounting'
+                        ? 'bg-gradient-to-r from-[#C59B47] to-[#A47F33] text-[#111613] shadow-sm'
+                        : 'bg-[#FAF8F5] text-gray-700 hover:bg-[#F2ECE1] border border-[#EAE4DC]'
+                    }`}
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>3. Bagan Akun (COA) &amp; Jurnal</span>
+                  </button>
 
-                  {/* 4. Ketentuan Pajak UMKM PP 55/2022 */}
-                  <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-3">
-                    <h3 className="font-bold text-sm text-[#111613] flex items-center gap-2">
-                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                      <span>4. Kapan HATOBA Perlu Daftar &amp; Bayar Pajak? (PP 55 Tahun 2022)</span>
-                    </h3>
-                    <ul className="list-disc pl-5 space-y-1 text-gray-600">
-                      <li><strong>Omzet s.d. Rp 500 Juta/Tahun BEBAS PAJAK:</strong> Sesuai PP 55/2022 dan UU HPP, Wajib Pajak Orang Pribadi UMKM dengan omzet di bawah Rp 500.000.000 dalam setahun <em>TIDAK DIKENAKAN PAJAK</em> PPh Final sama sekali (0%).</li>
-                      <li><strong>Tarif PPh Final 0,5%:</strong> Jika omzet kumulatif melewati Rp 500 juta, pajak yang dibayar hanya 0,5% dari kelebihan omzet tersebut. Sangat ringan dan sederhana tanpa pembukuan rumit.</li>
-                      <li><strong>Saran Praktisi:</strong> Fokuskan dulu energi 6-12 bulan pertama untuk menstabilkan arus kas, merapikan catatan kasir di Mini ERP ini, dan menekan piutang macet. Pajak baru dipikirkan saat omzet mendekati batas threshold.</li>
-                    </ul>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setHelpSubTab('inventory_grn')}
+                    className={`px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+                      helpSubTab === 'inventory_grn'
+                        ? 'bg-gradient-to-r from-[#C59B47] to-[#A47F33] text-[#111613] shadow-sm'
+                        : 'bg-[#FAF8F5] text-gray-700 hover:bg-[#F2ECE1] border border-[#EAE4DC]'
+                    }`}
+                  >
+                    <Truck className="w-3.5 h-3.5" />
+                    <span>4. Gudang, GRN &amp; Stok Freezer</span>
+                  </button>
 
-                  {/* 5. Glosarium Singkat Akuntansi SAK EMKM */}
-                  <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-3">
-                    <h3 className="font-bold text-sm text-[#111613] flex items-center gap-2">
-                      <BookOpen className="w-4 h-4 text-blue-600" />
-                      <span>5. Kamus &amp; Glosarium Istilah Akuntansi Sederhana</span>
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
-                      <div>
-                        <strong className="text-[#111613]">HPP (Harga Pokok Penjualan):</strong>
-                        <p className="text-gray-500">Harga beli daging mentah dari RPH ditambah ongkir pendingin masuk.</p>
-                      </div>
-                      <div>
-                        <strong className="text-[#111613]">Piutang Usaha (AR):</strong>
-                        <p className="text-gray-500">Uang HATOBA yang masih ada di tangan konsumen yang membeli tempo.</p>
-                      </div>
-                      <div>
-                        <strong className="text-[#111613]">Hutang Usaha (AP):</strong>
-                        <p className="text-gray-500">Kewajiban HATOBA ke supplier peternak/RPH yang belum dilunasi.</p>
-                      </div>
-                      <div>
-                        <strong className="text-[#111613]">Ekuitas (Modal):</strong>
-                        <p className="text-gray-500">Kekayaan bersih pemilik setelah seluruh total aset dikurangi seluruh hutang.</p>
-                      </div>
-                    </div>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setHelpSubTab('credit_tax_security')}
+                    className={`px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+                      helpSubTab === 'credit_tax_security'
+                        ? 'bg-gradient-to-r from-[#C59B47] to-[#A47F33] text-[#111613] shadow-sm'
+                        : 'bg-[#FAF8F5] text-gray-700 hover:bg-[#F2ECE1] border border-[#EAE4DC]'
+                    }`}
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>5. Kebijakan Kredit, Pajak &amp; SOP</span>
+                  </button>
                 </div>
               </div>
+
+              {/* TAB CONTENT 1: USER MANUAL & ALUR KASIR */}
+              {helpSubTab === 'user_manual' && (
+                <div className="space-y-5 animate-in fade-in duration-200 text-xs">
+                  {/* Step Diagram Alur Kerja */}
+                  <div className="p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-4">
+                    <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
+                      <ListOrdered className="w-4 h-4 text-emerald-700" />
+                      <span>Siklus Transaksi End-to-End (Dari Web/Chat hingga Kasir &amp; Akuntansi)</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-gray-700">
+                      <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-2">
+                        <div className="w-6 h-6 rounded-full bg-amber-800 text-white font-mono font-bold flex items-center justify-center text-[11px]">
+                          1
+                        </div>
+                        <h4 className="font-bold text-gray-900 text-sm">Inquiry Konsumen</h4>
+                        <p className="text-[11px] text-gray-600 leading-relaxed">
+                          Konsumen membuka katalog web atau halaman frozen food, memilih produk (pack matang atau komoditas mentah) dan mengirim pesan otomatis via WhatsApp meminta ketersediaan stok &amp; harga hari ini.
+                        </p>
+                      </div>
+
+                      <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-2">
+                        <div className="w-6 h-6 rounded-full bg-amber-800 text-white font-mono font-bold flex items-center justify-center text-[11px]">
+                          2
+                        </div>
+                        <h4 className="font-bold text-gray-900 text-sm">Nego Harga &amp; Input POS</h4>
+                        <p className="text-[11px] text-gray-600 leading-relaxed">
+                          Setelah deal di WA, admin/kasir membuka <strong>POS Kasir</strong>. Untuk produk mentah, klik tombol <em>&ldquo;+ Input Produk Mentah / Nego&rdquo;</em>, pilih satuan (Kg/Dus), jumlah, dan harga kesepakatan harian.
+                        </p>
+                      </div>
+
+                      <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-2">
+                        <div className="w-6 h-6 rounded-full bg-amber-800 text-white font-mono font-bold flex items-center justify-center text-[11px]">
+                          3
+                        </div>
+                        <h4 className="font-bold text-gray-900 text-sm">Pilih 4 Mode Bayar POS</h4>
+                        <p className="text-[11px] text-gray-600 leading-relaxed">
+                          Kasir memilih skema: <strong>LUNAS</strong> (Tunai/Transfer/QRIS), <strong>DP</strong> (uang muka), <strong>TEMPO B2B</strong> (kredit jatuh tempo max 3 hari), atau <strong>CAMPURAN</strong> (sebagian bayar sekarang, sisa tempo).
+                        </p>
+                      </div>
+
+                      <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-2">
+                        <div className="w-6 h-6 rounded-full bg-amber-800 text-white font-mono font-bold flex items-center justify-center text-[11px]">
+                          4
+                        </div>
+                        <h4 className="font-bold text-gray-900 text-sm">Faktur &amp; Masuk Keuangan</h4>
+                        <p className="text-[11px] text-gray-600 leading-relaxed">
+                          Sistem otomatis mencetak Faktur/Surat Jalan Cold Chain (−18°C) dan Nota Thermal 58/80mm. Data otomatis mengalir ke Mini ERP Keuangan tanpa input akuntansi manual.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4 Mode Pembayaran POS Detail */}
+                  <div className="p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-4">
+                    <h3 className="font-bold text-sm text-[#111613] flex items-center gap-2">
+                      <Receipt className="w-4 h-4 text-[#8C6B24]" />
+                      <span>Panduan Kasir: 4 Skema Pembayaran POS Kasir HATOBA</span>
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="px-2 py-0.5 rounded font-bold text-emerald-900 bg-emerald-200/80 text-[11px]">
+                            1. Mode LUNAS
+                          </span>
+                          <span className="text-[10px] font-mono text-emerald-700">Order VERIFIED</span>
+                        </div>
+                        <p className="text-gray-700 text-[11px] leading-relaxed">
+                          Konsumen membayar penuh saat transaksi. Jika tunai dan uang berlebih, kasir menginput nominal uang diterima dan sistem menghitung kembalian otomatis. Jika transfer bank (BCA/Mandiri) atau QRIS, status otomatis lunas 100%.
+                        </p>
+                        <div className="p-2 rounded-xl bg-white border border-emerald-200 text-[10px] font-mono text-gray-600">
+                          Jurnal Otomatis: (D) 101/102 Kas/Bank = Rp Total, (K) 401/402 Pendapatan Penjualan = Rp Total
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="px-2 py-0.5 rounded font-bold text-amber-900 bg-amber-200/80 text-[11px]">
+                            2. Mode DP (Down Payment)
+                          </span>
+                          <span className="text-[10px] font-mono text-amber-700">Order PENDING</span>
+                        </div>
+                        <p className="text-gray-700 text-[11px] leading-relaxed">
+                          Konsumen membayar uang muka terlebih dahulu (misal order katering/partai). Kasir menginput nominal DP yang diterima. Sisa tagihan otomatis tercatat sebagai Piutang Usaha Konsumen.
+                        </p>
+                        <div className="p-2 rounded-xl bg-white border border-amber-200 text-[10px] font-mono text-gray-600">
+                          Jurnal: (D) 101/102 Kas DP, (D) 103 Piutang Usaha (Sisa), (K) 401/402 Pendapatan (Total)
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-2xl bg-blue-50/50 border border-blue-200 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="px-2 py-0.5 rounded font-bold text-blue-900 bg-blue-200/80 text-[11px]">
+                            3. Mode TEMPO B2B
+                          </span>
+                          <span className="text-[10px] font-mono text-blue-700">Order PENDING</span>
+                        </div>
+                        <p className="text-gray-700 text-[11px] leading-relaxed">
+                          Khusus restoran/warung langganan terverifikasi. Tidak ada uang masuk saat pengiriman (Rp 0). Seluruh nilai transaksi dicatat sebagai Piutang Usaha dengan batas jatuh tempo maksimal 3 hari kalender.
+                        </p>
+                        <div className="p-2 rounded-xl bg-white border border-blue-200 text-[10px] font-mono text-gray-600">
+                          Jurnal: (D) 103 Piutang Usaha = Rp Total, (K) 401/402 Pendapatan Penjualan = Rp Total
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-2xl bg-purple-50/50 border border-purple-200 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="px-2 py-0.5 rounded font-bold text-purple-900 bg-purple-200/80 text-[11px]">
+                            4. Mode CAMPURAN (Bayar + Tempo)
+                          </span>
+                          <span className="text-[10px] font-mono text-purple-700">Order PENDING</span>
+                        </div>
+                        <p className="text-gray-700 text-[11px] leading-relaxed">
+                          Konsumen membayar sebagian via Tunai atau Transfer hari ini, dan sisanya secara tegas disepakati masuk Tempo B2B. Struk transaksi mencantumkan label <em>&ldquo;Tunai/Transfer + Tempo B2B&rdquo;</em>.
+                        </p>
+                        <div className="p-2 rounded-xl bg-white border border-purple-200 text-[10px] font-mono text-gray-600">
+                          Jurnal: (D) 101/102 Kas Dibayar, (D) 103 Piutang Sisa Tempo, (K) 401/402 Pendapatan
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Input Produk Mentah Nego & SOP Tutup Kasir */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-3">
+                      <div className="flex items-center gap-2 text-amber-800 font-bold text-sm">
+                        <Scale className="w-4 h-4 text-amber-700" />
+                        <span>Cara Input Produk Mentah (Harga Nego) di POS</span>
+                      </div>
+                      <ol className="list-decimal pl-5 space-y-1.5 text-gray-600 text-[11px]">
+                        <li>Buka menu <strong>POS Kasir</strong> di admin panel.</li>
+                        <li>Klik tombol emas <strong>&ldquo;+ Input Produk Mentah / Nego&rdquo;</strong> di atas katalog.</li>
+                        <li>Pilih produk: <em>Babat Fresh Frozen (Kg)</em>, <em>Paru Fresh Frozen (Dus 15–20kg)</em>, atau <em>Iga Fresh Frozen (Kg)</em>.</li>
+                        <li>Pilih satuan penjualan (Kg, Dus, atau Pack).</li>
+                        <li>Ketik kuantitas timbangan (bisa desimal, misal <code>37.5</code> Kg).</li>
+                        <li>Ketik harga satuan hasil kesepakatan chat WA (misal Rp 75.000/kg).</li>
+                        <li>Subtotal otomatis dihitung tanpa drift angka. Klik <em>Tambahkan ke Kasir</em>.</li>
+                      </ol>
+                    </div>
+
+                    <div className="p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-3">
+                      <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
+                        <CheckCheck className="w-4 h-4 text-emerald-700" />
+                        <span>SOP Tutup Kasir &amp; Rekonsiliasi Harian (Pukul 21:00)</span>
+                      </div>
+                      <ol className="list-decimal pl-5 space-y-1.5 text-gray-600 text-[11px]">
+                        <li>Buka tab <strong>Tutup Kasir &amp; Bank</strong> di portal Keuangan.</li>
+                        <li><strong>Hitung Uang Fisik Laci:</strong> Hitung uang lembar dan koin di laci kasir secara independen (jangan melihat angka sistem terlebih dahulu).</li>
+                        <li><strong>Cek Mutasi Bank Mandiri:</strong> Buka mobile banking Mandiri <em>(1370016639326 a.n Doni Kristiawan)</em>, masukkan total dana transfer masuk hari ini.</li>
+                        <li>Jika terjadi selisih, sistem otomatis membuat jurnal: selisih kurang ke <em>Beban Selisih Kasir (Akun 608)</em>, selisih lebih ke <em>Pendapatan Lain-lain (Akun 403)</em>.</li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB CONTENT 2: CARA BACA LAPORAN KEUANGAN */}
+              {helpSubTab === 'reading_reports' && (
+                <div className="space-y-5 animate-in fade-in duration-200 text-xs">
+                  {/* Warning Dasar Akuntansi */}
+                  <div className="p-5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 flex items-start gap-3">
+                    <Info className="w-5 h-5 text-amber-700 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-bold text-sm">Kaidah Utama: Perbedaan Laba di Laporan vs Kas di Rekening</div>
+                      <p className="text-[11px] text-amber-900 mt-1 leading-relaxed">
+                        Laporan Laba Rugi menganut <strong>Basis Akrual</strong> (pendapatan dicatat saat pesanan diverifikasi), sedangkan Laporan Arus Kas menganut <strong>Basis Kas Riil</strong>. Jika omzet besar namun kas kosong, periksa tab <em>Penuaan Piutang (AR Aging)</em>—itu tanda uang modal HATOBA masih tertahan di konsumen resto/warung yang belum melunasi invoice tempo!
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Grid 4 Laporan Pokok */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {/* 1. Laba Rugi */}
+                    <div className="p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-3">
+                      <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
+                        <TrendingUp className="w-4 h-4 text-emerald-600" />
+                        <span>1. Cara Membaca Laporan Laba Rugi (Income Statement)</span>
+                      </div>
+                      <div className="space-y-2 text-gray-700 text-[11px]">
+                        <p><strong>• Penjualan Bersih (Akun 401 &amp; 402):</strong> Total omzet penjualan produk pack dan karkas mentah yang telah diproses.</p>
+                        <p><strong>• HPP Daging Mentah (Akun 501):</strong> Biaya pembelian daging dari RPH/peternak ditambah ongkir kargo pendingin masuk.</p>
+                        <p><strong>• Laba Kotor (Gross Profit):</strong> <code>Penjualan Bersih − HPP</code>. Margin dasar sebelum dipotong operasional.</p>
+                        <p><strong>• Beban Operasional (Akun 601–608):</strong> Biaya listrik freezer −18°C, plastik vacuum, ekspedisi cold chain, dan gaji staf.</p>
+                        <p><strong>• Laba Bersih Operasional:</strong> <code>Laba Kotor − Total Beban Ops</code>. Keuntungan riil usaha periode tersebut.</p>
+                      </div>
+                    </div>
+
+                    {/* 2. Neraca */}
+                    <div className="p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-3">
+                      <div className="flex items-center gap-2 text-blue-800 font-bold text-sm">
+                        <Scale className="w-4 h-4 text-blue-600" />
+                        <span>2. Cara Membaca Posisi Keuangan (Neraca / Balance Sheet)</span>
+                      </div>
+                      <div className="space-y-2 text-gray-700 text-[11px]">
+                        <p className="font-semibold text-gray-900">Mengikuti Persamaan Standar SAK EMKM: Aset = Kewajiban + Ekuitas</p>
+                        <p><strong>• Aset Lancar:</strong> Kas Fisik Laci (101) + Bank Mandiri (102) + Piutang Usaha Konsumen (103) + Nilai Persediaan Stok Daging Freezer (104).</p>
+                        <p><strong>• Kewajiban (Liabilities):</strong> Hutang Usaha ke Supplier RPH/Peternak (201) + Hutang Beban (202).</p>
+                        <p><strong>• Ekuitas Pemilik:</strong> Modal Awal Doni Kristiawan (301) + Laba Ditahan Akumulatif (302).</p>
+                        <p className="text-[10px] text-gray-500 italic">Neraca harus seimbang (balance). Jika tidak seimbang, sistem memberikan indikator warning otomatis.</p>
+                      </div>
+                    </div>
+
+                    {/* 3. Arus Kas Langsung */}
+                    <div className="p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-3">
+                      <div className="flex items-center gap-2 text-purple-800 font-bold text-sm">
+                        <Wallet className="w-4 h-4 text-purple-600" />
+                        <span>3. Cara Membaca Arus Kas Langsung (Direct Cash Flow)</span>
+                      </div>
+                      <div className="space-y-2 text-gray-700 text-[11px]">
+                        <p>Hanya mencatat rupiah yang riil masuk dan keluar dari rekening Bank Mandiri dan laci kasir:</p>
+                        <p><strong>• Arus Kas Operasi:</strong> Penerimaan kas dari konsumen (tunai &amp; pelunasan piutang) dikurangi pembayaran tunai ke supplier daging, listrik PLN freezer, dan gaji.</p>
+                        <p><strong>• Arus Kas Investasi:</strong> Pembelian aset tetap (freezer komersial baru, genset cadangan, renovasi cold storage).</p>
+                        <p><strong>• Arus Kas Pendanaan:</strong> Setoran modal tambahan pemilik atau penarikan prive pribadi pemilik.</p>
+                      </div>
+                    </div>
+
+                    {/* 4. AR Aging & Cut-Off Freeze */}
+                    <div className="p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-3">
+                      <div className="flex items-center gap-2 text-amber-800 font-bold text-sm">
+                        <Clock className="w-4 h-4 text-amber-600" />
+                        <span>4. Analisis Penuaan Piutang (AR Aging) &amp; Cut-Off Freeze</span>
+                      </div>
+                      <div className="space-y-2 text-gray-700 text-[11px]">
+                        <p><strong>• 0–7 Hari (Lancar):</strong> Piutang tempo normal dalam masa toleransi.</p>
+                        <p><strong>• 8–14 Hari (Warning):</strong> Kirim pesan penagihan sopan via WhatsApp.</p>
+                        <p><strong>• 15–30 Hari (Kritis):</strong> Stop pengiriman pesanan baru ke resto tersebut!</p>
+                        <p><strong>• &gt;30 Hari (Macet):</strong> Kunjungi langsung dan lakukan evaluasi plafon.</p>
+                        <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 mt-2">
+                          <strong className="text-amber-900 block">Tombol Cut-Off Freeze (Audit Ready):</strong>
+                          <span className="text-[10px] text-amber-800">
+                            Digunakan saat ingin mencetak laporan resmi tanpa tergeser oleh transaksi kasir baru yang sedang berjalan. Klik tombol <em>Freeze</em> di header atas.
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB CONTENT 3: BAGAN AKUN (COA) & ATURAN JURNAL */}
+              {helpSubTab === 'coa_accounting' && (
+                <div className="space-y-5 animate-in fade-in duration-200 text-xs">
+                  {/* Tabel Daftar Akun COA Resmi */}
+                  <div className="p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-4">
+                    <div>
+                      <h3 className="font-bold text-sm text-[#111613] flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-blue-600" />
+                        <span>Bagan Akun Standar (Chart of Accounts - COA) SAK EMKM HATOBA</span>
+                      </h3>
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        Daftar 17 kode akun resmi yang digunakan secara seragam oleh seluruh modul kasir, mutasi kas, persediaan freezer, dan laporan keuangan.
+                      </p>
+                    </div>
+
+                    <div className="overflow-x-auto -mx-2 px-2">
+                      <table className="w-full text-left border border-gray-200 rounded-xl overflow-hidden text-[11px]">
+                        <thead className="bg-[#FAF8F5] text-gray-700 font-bold border-b border-gray-200 uppercase text-[10px]">
+                          <tr>
+                            <th className="py-2.5 px-3 w-16">Kode</th>
+                            <th className="py-2.5 px-3">Nama Akun Akuntansi</th>
+                            <th className="py-2.5 px-3">Klasifikasi</th>
+                            <th className="py-2.5 px-3 w-28 text-center">Saldo Normal</th>
+                            <th className="py-2.5 px-3">Deskripsi &amp; Peruntukan Operasional</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          <tr className="hover:bg-gray-50/60 font-semibold text-emerald-950">
+                            <td className="py-2.5 px-3 font-mono font-bold text-emerald-800">101</td>
+                            <td className="py-2.5 px-3">Kas Fisik di Laci Toko</td>
+                            <td className="py-2.5 px-3 text-gray-600">Aset Lancar</td>
+                            <td className="py-2.5 px-3 text-center"><span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">DEBIT</span></td>
+                            <td className="py-2.5 px-3 text-gray-600 font-normal">Uang kartal fisik (kertas &amp; koin) hasil transaksi kasir di toko/outlet.</td>
+                          </tr>
+                          <tr className="hover:bg-gray-50/60 font-semibold text-emerald-950">
+                            <td className="py-2.5 px-3 font-mono font-bold text-emerald-800">102</td>
+                            <td className="py-2.5 px-3">Bank Mandiri Operasional</td>
+                            <td className="py-2.5 px-3 text-gray-600">Aset Lancar</td>
+                            <td className="py-2.5 px-3 text-center"><span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">DEBIT</span></td>
+                            <td className="py-2.5 px-3 text-gray-600 font-normal">Rekening 1370016639326 a.n Doni Kristiawan untuk transfer konsumen &amp; bayar supplier.</td>
+                          </tr>
+                          <tr className="hover:bg-gray-50/60 font-semibold text-emerald-950">
+                            <td className="py-2.5 px-3 font-mono font-bold text-emerald-800">103</td>
+                            <td className="py-2.5 px-3">Piutang Usaha Konsumen B2B</td>
+                            <td className="py-2.5 px-3 text-gray-600">Aset Lancar</td>
+                            <td className="py-2.5 px-3 text-center"><span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">DEBIT</span></td>
+                            <td className="py-2.5 px-3 text-gray-600 font-normal">Hak tagih HATOBA atas pesanan tempo/DP yang belum dilunasi konsumen resto/katering.</td>
+                          </tr>
+                          <tr className="hover:bg-gray-50/60 font-semibold text-emerald-950">
+                            <td className="py-2.5 px-3 font-mono font-bold text-emerald-800">104</td>
+                            <td className="py-2.5 px-3">Persediaan Barang Dagang Daging Beku</td>
+                            <td className="py-2.5 px-3 text-gray-600">Aset Lancar</td>
+                            <td className="py-2.5 px-3 text-center"><span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">DEBIT</span></td>
+                            <td className="py-2.5 px-3 text-gray-600 font-normal">Nilai rupiah fisik daging sapi dan jeroan yang tersimpan aman di freezer −18°C.</td>
+                          </tr>
+                          <tr className="hover:bg-gray-50/60 text-rose-950 font-semibold">
+                            <td className="py-2.5 px-3 font-mono font-bold text-rose-800">201</td>
+                            <td className="py-2.5 px-3">Hutang Usaha Supplier RPH / Peternak</td>
+                            <td className="py-2.5 px-3 text-gray-600">Kewajiban</td>
+                            <td className="py-2.5 px-3 text-center"><span className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 font-bold">KREDIT</span></td>
+                            <td className="py-2.5 px-3 text-gray-600 font-normal">Kewajiban pembayaran pembelian karkas/daging mentah yang belum dilunasi ke RPH.</td>
+                          </tr>
+                          <tr className="hover:bg-gray-50/60 text-rose-950 font-semibold">
+                            <td className="py-2.5 px-3 font-mono font-bold text-rose-800">202</td>
+                            <td className="py-2.5 px-3">Hutang Beban Operasional &amp; Listrik</td>
+                            <td className="py-2.5 px-3 text-gray-600">Kewajiban</td>
+                            <td className="py-2.5 px-3 text-center"><span className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 font-bold">KREDIT</span></td>
+                            <td className="py-2.5 px-3 text-gray-600 font-normal">Tagihan listrik PLN, sewa tempat, atau jasa logistik yang belum dibayarkan.</td>
+                          </tr>
+                          <tr className="hover:bg-gray-50/60 text-purple-950 font-semibold">
+                            <td className="py-2.5 px-3 font-mono font-bold text-purple-800">301</td>
+                            <td className="py-2.5 px-3">Modal Pemilik (Doni Kristiawan)</td>
+                            <td className="py-2.5 px-3 text-gray-600">Ekuitas</td>
+                            <td className="py-2.5 px-3 text-center"><span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-bold">KREDIT</span></td>
+                            <td className="py-2.5 px-3 text-gray-600 font-normal">Setoran modal awal dan tambahan investasi dari pemilik untuk operasional HATOBA.</td>
+                          </tr>
+                          <tr className="hover:bg-gray-50/60 text-purple-950 font-semibold">
+                            <td className="py-2.5 px-3 font-mono font-bold text-purple-800">302</td>
+                            <td className="py-2.5 px-3">Laba Ditahan Akumulatif</td>
+                            <td className="py-2.5 px-3 text-gray-600">Ekuitas</td>
+                            <td className="py-2.5 px-3 text-center"><span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-bold">KREDIT</span></td>
+                            <td className="py-2.5 px-3 text-gray-600 font-normal">Akumulasi keuntungan bersih usaha dari periode-periode sebelumnya yang diputar kembali.</td>
+                          </tr>
+                          <tr className="hover:bg-gray-50/60 text-blue-950 font-semibold">
+                            <td className="py-2.5 px-3 font-mono font-bold text-blue-800">401</td>
+                            <td className="py-2.5 px-3">Pendapatan Penjualan Frozen Food Pack</td>
+                            <td className="py-2.5 px-3 text-gray-600">Pendapatan</td>
+                            <td className="py-2.5 px-3 text-center"><span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold">KREDIT</span></td>
+                            <td className="py-2.5 px-3 text-gray-600 font-normal">Omzet penjualan 5 produk olahan kemasan pack resmi (Babat, Paru, Iga, Iso, Mix 4 Lauk).</td>
+                          </tr>
+                          <tr className="hover:bg-gray-50/60 text-blue-950 font-semibold">
+                            <td className="py-2.5 px-3 font-mono font-bold text-blue-800">402</td>
+                            <td className="py-2.5 px-3">Pendapatan Penjualan Karkas &amp; Mentah Nego</td>
+                            <td className="py-2.5 px-3 text-gray-600">Pendapatan</td>
+                            <td className="py-2.5 px-3 text-center"><span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold">KREDIT</span></td>
+                            <td className="py-2.5 px-3 text-gray-600 font-normal">Omzet penjualan komoditas mentah (Babat Kg, Paru Dus, Iga Kg) dengan harga nego WA.</td>
+                          </tr>
+                          <tr className="hover:bg-gray-50/60 text-blue-950 font-semibold">
+                            <td className="py-2.5 px-3 font-mono font-bold text-blue-800">403</td>
+                            <td className="py-2.5 px-3">Pendapatan Lain-lain / Kelebihan Kasir</td>
+                            <td className="py-2.5 px-3 text-gray-600">Pendapatan</td>
+                            <td className="py-2.5 px-3 text-center"><span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold">KREDIT</span></td>
+                            <td className="py-2.5 px-3 text-gray-600 font-normal">Pendapatan dari pembulatan receh atau selisih lebih uang laci saat tutup kasir.</td>
+                          </tr>
+                          <tr className="hover:bg-gray-50/60 text-amber-950 font-semibold">
+                            <td className="py-2.5 px-3 font-mono font-bold text-amber-800">501</td>
+                            <td className="py-2.5 px-3">Harga Pokok Penjualan (HPP Daging Mentah)</td>
+                            <td className="py-2.5 px-3 text-gray-600">Beban Pokok</td>
+                            <td className="py-2.5 px-3 text-center"><span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-bold">DEBIT</span></td>
+                            <td className="py-2.5 px-3 text-gray-600 font-normal">Harga beli bahan baku daging/jeroan yang melekat langsung pada produk yang terjual.</td>
+                          </tr>
+                          <tr className="hover:bg-gray-50/60 text-gray-900 font-semibold">
+                            <td className="py-2.5 px-3 font-mono font-bold text-gray-700">601</td>
+                            <td className="py-2.5 px-3">Beban Listrik PLN &amp; Cold Storage −18°C</td>
+                            <td className="py-2.5 px-3 text-gray-600">Beban Operasional</td>
+                            <td className="py-2.5 px-3 text-center"><span className="px-2 py-0.5 rounded bg-gray-200 text-gray-800 font-bold">DEBIT</span></td>
+                            <td className="py-2.5 px-3 text-gray-600 font-normal">Biaya listrik PLN untuk menjaga suhu kompresor freezer pembekuan daging secara konsisten.</td>
+                          </tr>
+                          <tr className="hover:bg-gray-50/60 text-gray-900 font-semibold">
+                            <td className="py-2.5 px-3 font-mono font-bold text-gray-700">602</td>
+                            <td className="py-2.5 px-3">Beban Plastik Vacuum &amp; Kemasan Karton Dus</td>
+                            <td className="py-2.5 px-3 text-gray-600">Beban Operasional</td>
+                            <td className="py-2.5 px-3 text-center"><span className="px-2 py-0.5 rounded bg-gray-200 text-gray-800 font-bold">DEBIT</span></td>
+                            <td className="py-2.5 px-3 text-gray-600 font-normal">Pembelian plastik food-grade vacuum pack, kardus karton, lakban, dan label halal.</td>
+                          </tr>
+                          <tr className="hover:bg-gray-50/60 text-gray-900 font-semibold">
+                            <td className="py-2.5 px-3 font-mono font-bold text-gray-700">603</td>
+                            <td className="py-2.5 px-3">Beban Logistik, Es Pendingin &amp; Cold Chain</td>
+                            <td className="py-2.5 px-3 text-gray-600">Beban Operasional</td>
+                            <td className="py-2.5 px-3 text-center"><span className="px-2 py-0.5 rounded bg-gray-200 text-gray-800 font-bold">DEBIT</span></td>
+                            <td className="py-2.5 px-3 text-gray-600 font-normal">Biaya ice-gel/dry-ice, bensin armada pendingin, dan ongkos kirim ekspedisi kargo dingin.</td>
+                          </tr>
+                          <tr className="hover:bg-gray-50/60 text-gray-900 font-semibold">
+                            <td className="py-2.5 px-3 font-mono font-bold text-gray-700">604</td>
+                            <td className="py-2.5 px-3">Beban Gaji &amp; Upah Karyawan Toko/Gudang</td>
+                            <td className="py-2.5 px-3 text-gray-600">Beban Operasional</td>
+                            <td className="py-2.5 px-3 text-center"><span className="px-2 py-0.5 rounded bg-gray-200 text-gray-800 font-bold">DEBIT</span></td>
+                            <td className="py-2.5 px-3 text-gray-600 font-normal">Gaji staf pemotongan, staf pengemasan freezer, kasir, dan kurir operasional HATOBA.</td>
+                          </tr>
+                          <tr className="hover:bg-gray-50/60 text-gray-900 font-semibold">
+                            <td className="py-2.5 px-3 font-mono font-bold text-gray-700">608</td>
+                            <td className="py-2.5 px-3">Beban Selisih Kurang Kasir / Kerugian Kas</td>
+                            <td className="py-2.5 px-3 text-gray-600">Beban Operasional</td>
+                            <td className="py-2.5 px-3 text-center"><span className="px-2 py-0.5 rounded bg-gray-200 text-gray-800 font-bold">DEBIT</span></td>
+                            <td className="py-2.5 px-3 text-gray-600 font-normal">Selisih uang fisik laci yang kurang saat tutup kasir harian yang ditanggung perusahaan.</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Logika Jurnal Otomatis */}
+                  <div className="p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-4">
+                    <h3 className="font-bold text-sm text-[#111613] flex items-center gap-2">
+                      <Scale className="w-4 h-4 text-emerald-700" />
+                      <span>Logika Penjurnalan Double-Entry Otomatis Sistem</span>
+                    </h3>
+                    <p className="text-[11px] text-gray-500">
+                      Evaluasi akuntansi: Seluruh transaksi POS dan operasional otomatis dijurnal seimbang tanpa staf perlu memikirkan posisi debit/kredit manual.
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px]">
+                      <div className="p-3.5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-1.5">
+                        <span className="font-bold text-gray-900 block">A. Penjualan Tunai / Lunas Kasir:</span>
+                        <div className="font-mono text-[10px] space-y-0.5 text-gray-700">
+                          <div>[DEBIT] 101 Kas di Laci / 102 Bank Mandiri</div>
+                          <div>[KREDIT] 401/402 Pendapatan Penjualan</div>
+                        </div>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-1.5">
+                        <span className="font-bold text-gray-900 block">B. Penjualan Tempo B2B (Piutang Konsumen):</span>
+                        <div className="font-mono text-[10px] space-y-0.5 text-gray-700">
+                          <div>[DEBIT] 103 Piutang Usaha Konsumen</div>
+                          <div>[KREDIT] 401/402 Pendapatan Penjualan</div>
+                        </div>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-1.5">
+                        <span className="font-bold text-gray-900 block">C. Pelunasan Piutang oleh Konsumen:</span>
+                        <div className="font-mono text-[10px] space-y-0.5 text-gray-700">
+                          <div>[DEBIT] 102 Bank Mandiri (Uang Masuk)</div>
+                          <div>[KREDIT] 103 Piutang Usaha (Piutang Berkurang)</div>
+                        </div>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-1.5">
+                        <span className="font-bold text-gray-900 block">D. Pembelian Daging Mentah dari RPH (Tunai):</span>
+                        <div className="font-mono text-[10px] space-y-0.5 text-gray-700">
+                          <div>[DEBIT] 501 HPP Daging Mentah</div>
+                          <div>[KREDIT] 102 Bank Mandiri / 101 Kas</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB CONTENT 4: GUDANG, GRN & STOK FREEZER */}
+              {helpSubTab === 'inventory_grn' && (
+                <div className="space-y-5 animate-in fade-in duration-200 text-xs">
+                  <div className="p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-4">
+                    <div className="flex items-center gap-2 text-cyan-800 font-bold text-sm">
+                      <Truck className="w-4 h-4 text-cyan-700" />
+                      <span>SOP Penerimaan Barang Masuk (Goods Receipt Note / GRN)</span>
+                    </div>
+                    <p className="text-[11px] text-gray-600 leading-relaxed">
+                      Setiap kali pasokan daging sapi beku atau karkas segar tiba dari RPH / peternak, tim gudang cold storage wajib mengisi formulir <strong>Terima Barang (GRN)</strong>:
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="p-4 rounded-2xl bg-cyan-50/60 border border-cyan-200 space-y-1.5">
+                        <div className="font-bold text-cyan-950 flex items-center gap-1.5">
+                          <Thermometer className="w-3.5 h-3.5 text-cyan-700" />
+                          <span>Pemeriksaan Suhu Inti</span>
+                        </div>
+                        <p className="text-[11px] text-gray-600">
+                          Suhu daging beku saat dibongkar dari kargo wajib <strong>&le; −18°C</strong>. Jika suhu &gt; −10°C (ada tanda <em>thawing</em>/mencair), daging wajib dikarantina atau ditolak karena merusak mutu cold chain.
+                        </p>
+                      </div>
+
+                      <div className="p-4 rounded-2xl bg-cyan-50/60 border border-cyan-200 space-y-1.5">
+                        <div className="font-bold text-cyan-950 flex items-center gap-1.5">
+                          <Scale className="w-3.5 h-3.5 text-cyan-700" />
+                          <span>Timbangan Fisik Aktual</span>
+                        </div>
+                        <p className="text-[11px] text-gray-600">
+                          Timbang ulang seluruh dus karton atau karkas gantung. Masukkan berat bersih timbangan aktual (kg) ke kolom GRN, bukan hanya menyalin angka di surat jalan supplier.
+                        </p>
+                      </div>
+
+                      <div className="p-4 rounded-2xl bg-cyan-50/60 border border-cyan-200 space-y-1.5">
+                        <div className="font-bold text-cyan-950 flex items-center gap-1.5">
+                          <PackageCheck className="w-3.5 h-3.5 text-cyan-700" />
+                          <span>Pencatatan Batch &amp; Expired</span>
+                        </div>
+                        <p className="text-[11px] text-gray-600">
+                          Catat nomor batch RPH dan tanggal kedaluwarsa beku. Sistem otomatis menambah kuantitas dan nilai persediaan di Neraca Keuangan (Akun 104).
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-4">
+                    <div className="flex items-center gap-2 text-[#8C6B24] font-bold text-sm">
+                      <Snowflake className="w-4 h-4 text-[#8C6B24]" />
+                      <span>SOP Stock Opname Freezer &amp; Toleransi Susut Beku</span>
+                    </div>
+                    <div className="space-y-3 text-gray-700 text-[11px] leading-relaxed">
+                      <p>
+                        Stock Opname fisik freezer dilakukan <strong>setiap Jumat sore (pukul 16:30)</strong> atau akhir bulan. Seluruh kemasan pack dan dus karkas dihitung dan ditimbang kembali.
+                      </p>
+                      <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-2">
+                        <strong className="text-gray-900 block">Toleransi Penyusutan Alami (Shrinkage / Freezer Burn):</strong>
+                        <p className="text-gray-600">
+                          Dalam bisnis cold chain daging, penyusutan alami sebesar <strong>1% s.d 2%</strong> adalah batas wajar akibat penguapan kristal es beku (freezer frost). Jika selisih fisik lebih dari 2%, wajib dilakukan audit investigasi terhadap potensi kebocoran suhu freezer, kesalahan pencatatan kasir, atau kebocoran fisik.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB CONTENT 5: KEBIJAKAN KREDIT, PAJAK & SOP KEAMANAN */}
+              {helpSubTab === 'credit_tax_security' && (
+                <div className="space-y-5 animate-in fade-in duration-200 text-xs">
+                  {/* Kebijakan Kredit & Plafon Piutang */}
+                  <div className="p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-4">
+                    <h3 className="font-bold text-sm text-[#111613] flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-amber-600" />
+                      <span>1. Kebijakan Kredit, Plafon &amp; Penguncian Piutang (Kunci Menjaga Kas Tetap Ada)</span>
+                    </h3>
+                    <div className="space-y-2.5 text-gray-700 text-[11px] leading-relaxed">
+                      <p>
+                        Penyebab nomor satu kas usaha kosong adalah kelonggaran tempo ke warung/resto mitra. Kebijakan ketat HATOBA:
+                      </p>
+                      <ul className="list-disc pl-5 space-y-1.5 text-gray-600">
+                        <li><strong>Batas Tempo Maksimal 3 Hari Kalender:</strong> Tidak ada istilah tempo 14 atau 30 hari untuk usaha daging beku dengan modal awal terbatas. Maksimal jatuh tempo adalah 3 hari sejak barang diterima.</li>
+                        <li><strong>Plafon Kredit Maksimal Rp 3.000.000 per Mitra:</strong> Jika total tagihan yang belum lunas sudah mencapai Rp 3 Juta, pesanan baru <em>TIDAK BOLEH</em> dikirim secara tempo. Pesanan berikutnya wajib TUNAI atau TRANSFER LUNAS di muka sebelum kurir berangkat.</li>
+                        <li><strong>Lock Order Otomatis:</strong> Jangan pernah mengirim order baru ke resto yang memiliki faktur menunggak lewat tempo (alert merah di dashboard). Selesaikan tagihan lama terlebih dahulu.</li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  {/* Regulasi Perpajakan UMKM PP 55/2022 */}
+                  <div className="p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-4">
+                    <h3 className="font-bold text-sm text-[#111613] flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <span>2. Kebijakan Perpajakan UMKM Indonesia (PP 55 Tahun 2022 &amp; PMK 197/2013)</span>
+                    </h3>
+                    <div className="space-y-2.5 text-gray-700 text-[11px] leading-relaxed">
+                      <p>
+                        Status resmi perpajakan HATOBA Group saat ini: <strong>TETAP NON-PKP &amp; MEMANFAATKAN INSENTIF UMKM</strong>.
+                      </p>
+                      <ul className="list-disc pl-5 space-y-1.5 text-gray-600">
+                        <li><strong>Omzet s.d Rp 500 Juta/Tahun BEBAS PAJAK (0%):</strong> Sesuai UU HPP &amp; PP 55/2022, Wajib Pajak Orang Pribadi UMKM dengan omzet di bawah Rp 500.000.000 dalam 1 tahun pajak tidak dipungut PPh Final sama sekali.</li>
+                        <li><strong>Tarif PPh Final Ringan 0,5%:</strong> Jika omzet kumulatif tahun berjalan menembus Rp 500 Juta, pajak yang disetor hanya 0,5% dari kelebihan omzet di atas Rp 500 Juta tersebut.</li>
+                        <li><strong>Ambang Batas Non-PKP (Rp 4,8 Miliar):</strong> Selama omzet belum melewati Rp 4,8 Miliar per tahun, HATOBA tidak wajib menerbitkan Faktur Pajak PPN 11%/12%. Ini melindungi likuiditas kas usaha agar tidak terbebani talangan PPN pembeli tempo.</li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  {/* Keamanan Data & Logout Sesi */}
+                  <div className="p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-4">
+                    <h3 className="font-bold text-sm text-[#111613] flex items-center gap-2">
+                      <Lock className="w-4 h-4 text-blue-600" />
+                      <span>3. Standar Keamanan Sistem &amp; Prosedur Tutup Shift Kasir</span>
+                    </h3>
+                    <div className="space-y-2.5 text-gray-700 text-[11px] leading-relaxed">
+                      <ul className="list-disc pl-5 space-y-1.5 text-gray-600">
+                        <li><strong>Kerahasiaan PIN Finance:</strong> Kredensial PIN akses portal keuangan hanya dipegang oleh pemilik, kasir kepala, dan staf akuntansi yang berwenang. Dilarang membagikan sandi ke pihak luar.</li>
+                        <li><strong>Kewajiban Logout:</strong> Setiap kali selesai shift kerja kasir atau meninggalkan komputer kasir/admin, staf wajib menekan tombol <strong>&ldquo;Keluar&rdquo;</strong> di pojok kanan atas layar agar sesi terlindungi.</li>
+                        <li><strong>Audit Trail Mutasi:</strong> Seluruh mutasi kas masuk, pengeluaran kas, stock opname, dan penerimaan barang (GRN) mencatat tanggal, jam, akun sumber, dan nama penanggung jawab secara permanen untuk bahan audit tahunan pimpinan.</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </main>
