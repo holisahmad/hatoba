@@ -204,7 +204,7 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
       ? `\n*Rekening Pembayaran HATOBA:*\n• Mandiri: *1370016639326* a.n Doni Kristiawan\n\n*Mohon kirimkan bukti transfer setelah pembayaran dilakukan agar pesanan segera kami jadwalkan pengiriman beku −18°C.*\n`
       : ''
 
-    const message = `Halo ${order.customerName},\n\nBerikut rincian ${isPaid ? 'Faktur Lunas / Kuitansi' : 'Faktur Tagihan (Invoice)'} dari *HATOBA Group*:\n\n*Nomor Invoice:* INV-${order.referenceCode}\n*Status:* *${statusText}*\n*Tujuan:* ${order.businessName || order.customerName} (${order.city})\n\n*Rincian Pesanan:*\n${itemsSummary}\n${adjustmentText}\n*Total Tagihan:* *${formatIDR(order.totalAmount)}*\n*Metode:* ${order.paymentMethod || (isPaid ? 'Lunas' : 'Transfer Mandiri')}\n${dueDateText}${bankPaymentInfo}\nTerima kasih atas kerja samanya. Pesanan Anda diproses dengan standar rantai dingin −18°C.`
+    const message = `Halo ${order.customerName},\n\nBerikut rincian ${isPaid ? 'Faktur Lunas / Kuitansi' : 'Faktur Tagihan (Invoice)'} dari *HATOBA Group*:\n\n*Nomor Invoice:* INV-${order.referenceCode}\n*Status:* *${statusText}*\n*Tujuan:* ${order.businessName || order.customerName} (${order.city})\n\n*Rincian Pesanan:*\n${itemsSummary}\n${adjustmentText}\n*Total Tagihan:* *${formatIDR(order.totalAmount)}*\n*Metode:* ${order.paymentMethod || (isPaid ? 'Lunas' : 'Transfer Mandiri')}\n${dueDateText}${bankPaymentInfo}\nTerima kasih atas kerja samanya. Pesanan Anda diproses dengan standar Cold Chain −18°C.`
 
     const waUrl = `https://wa.me/${targetPhone}?text=${encodeURIComponent(message)}`
     window.open(waUrl, '_blank')

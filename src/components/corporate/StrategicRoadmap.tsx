@@ -32,7 +32,7 @@ export default function StrategicRoadmap() {
           </div>
 
           <p className="text-[#48564F] text-sm sm:text-base leading-relaxed font-light">
-            Tahapan ekspansi terencana dan alokasi modal disiplin HATOBA Group dari fondasi rantai dingin
+            Tahapan ekspansi terencana dan alokasi modal disiplin HATOBA Group dari fondasi Cold Chain
             Bali & Yogyakarta hingga kemandirian hulu peternakan terintegrasi.
           </p>
         </div>

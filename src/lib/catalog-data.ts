@@ -76,7 +76,7 @@ export const BUSINESS_UNITS: BusinessUnit[] = [
     description:
       'Pemasok utama jeroan dan daging sapi olahan higienis (Babat, Iso, Paru, Iga, dan Mix) yang dibekukan pada suhu -18°C dalam kemasan vacuum-pack untuk standar ketat Hotel, Restoran, Katering, dan Kafe (HORECA).',
     highlights: [
-      'Standar Higienis Rantai Dingin (-18°C)',
+      'Standar Higienis Cold Chain (-18°C)',
       'Kemasan Vacuum Pack Bersertifikasi Halal',
       'Pasokan Konsisten untuk Skala Retail & Partai B2B',
       'Distribusi Cepat di Wilayah Bali & Yogyakarta',
@@ -120,7 +120,7 @@ export const BUSINESS_UNITS: BusinessUnit[] = [
     statusType: 'expansion',
     tagline: 'Ketahanan Pasokan & Kualitas Genetik Peternakan Terpadu',
     description:
-      'Pengembangan peternakan sapi terintegrasi guna menjamin stabilitas pasokan hulu, seleksi pakan berkualitas tinggi, serta ketertelusuran genetik demi ketahanan pangan dan kesinambungan rantai dingin grup.',
+      'Pengembangan peternakan sapi terintegrasi guna menjamin stabilitas pasokan hulu, seleksi pakan berkualitas tinggi, serta ketertelusuran genetik demi ketahanan pangan dan kesinambungan Cold Chain grup.',
     highlights: [
       'Program Pemuliaan & Penggemukan Sapi Terpadu',
       'Jaminan Ketertelusuran Pakan dan Kesehatan Ternak',
@@ -160,7 +160,7 @@ export const FOOTPRINT_LOCATIONS: FootprintLocation[] = [
     badge: 'Beroperasi Aktif',
     address: 'Sleman / Kota Yogyakarta, D.I. Yogyakarta',
     description:
-      'Pusat logistik rantai dingin strategis melayani rantai pasok HORECA, restoran lokal, dan mitra katering di wilayah Jawa Bagian Tengah.',
+      'Pusat logistik Cold Chain strategis melayani rantai pasok HORECA, restoran lokal, dan mitra katering di wilayah Jawa Bagian Tengah.',
     coverage: ['Kota Yogyakarta', 'Sleman', 'Bantul', 'Klaten sekitarnya'],
     coordinates: { x: 42, y: 72 },
     phone: '+62 821-7368-358',
@@ -184,12 +184,12 @@ export const STRATEGIC_ROADMAP: RoadmapPhase[] = [
   {
     phase: 'Fase 1',
     year: '2024 - 2025',
-    title: 'Fondasi & Dominasi B2B Rantai Dingin',
+    title: 'Fondasi & Dominasi B2B Cold Chain',
     subtitle: 'Penguatan Infrastruktur Produksi & Hub Distribusi',
     description:
       'Memperkokoh kapabilitas produksi vacuum pack di Bali dan efisiensi rantai distribusi di Yogyakarta untuk memenuhi kebutuhan segmen HORECA dengan standar mutu tanpa kompromi.',
     deliverables: [
-      'Standardisasi fasilitas rantai dingin (-18°C)',
+      'Standardisasi fasilitas Cold Chain (-18°C)',
       'Ekspansi jaringan langganan hotel & resto Bali-DIY',
       'Peluncuran kemasan vacuum pack ritel & partai',
     ],
@@ -217,7 +217,7 @@ export const STRATEGIC_ROADMAP: RoadmapPhase[] = [
     description:
       'Akselerasi ekspansi geografis dengan peresmian fasilitas distribusi modern di Bandung guna melayani densitas bisnis kuliner Jawa Barat.',
     deliverables: [
-      'Pembukaan Hub Logistik Rantai Dingin Bandung',
+      'Pembukaan Hub Logistik Cold Chain Bandung',
       'Penetrasi kemitraan supplier restoran Jawa Barat',
       'Penguatan integrasi armada armada pendingin regional',
     ],
@@ -249,10 +249,10 @@ export const GROUP_SYNERGIES = [
     icon: 'ShieldCheck',
   },
   {
-    title: 'Infrastruktur Rantai Dingin Teruji',
+    title: 'Infrastruktur Cold Chain Teruji',
     subtitle: 'Higienitas & Keamanan Pangan Tanpa Kompromi',
     description:
-      'Dari fasilitas produksi hingga meja dapur mitra HORECA, rantai dingin terlindungi secara presisi. Kemasan kedap udara (vacuum pack) mengunci kesegaran tekstur, aroma, dan nutrisi alami produk.',
+      'Dari fasilitas produksi hingga meja dapur mitra HORECA, Cold Chain terlindungi secara presisi. Kemasan kedap udara (vacuum pack) mengunci kesegaran tekstur, aroma, dan nutrisi alami produk.',
     icon: 'Snowflake',
   },
   {

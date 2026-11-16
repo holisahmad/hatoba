@@ -35,7 +35,7 @@ ${itemList}
 
 Total Estimasi Produk: *${formatRupiah(order.totalAmount)}*
 ${order.notes ? `Catatan Pengiriman: ${order.notes}\n` : ''}
-Mohon konfirmasi ketersediaan stok, jadwal pengiriman rantai dingin, dan kelengkapan faktur. Terima kasih.`
+Mohon konfirmasi ketersediaan stok, jadwal pengiriman Cold Chain, dan kelengkapan faktur. Terima kasih.`
 
   return `https://wa.me/628217368358?text=${encodeURIComponent(text)}`
 }

@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'HATOBA Frozen Food — Supplier Jeroan & Daging Sapi Higienis',
     description:
-      'Penyedia bahan baku jeroan dan daging sapi higienis untuk restoran, katering, dan hotel di Hub Bali & Yogyakarta. Standar rantai dingin −18°C.',
+      'Penyedia bahan baku jeroan dan daging sapi higienis untuk restoran, katering, dan hotel di Hub Bali & Yogyakarta. Standar Cold Chain −18°C.',
     url: `${SITE_URL}/frozen-food`,
     type: 'website',
     images: [

@@ -170,7 +170,7 @@ export default function HeroCorporate() {
           <div className="bg-white/95 backdrop-blur-md border-t border-x border-[#EAE4DC] rounded-t-2xl px-6 sm:px-10 py-5 grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-8 shadow-lg shadow-stone-200/50">
             {[
               { value: '100% Higienis', label: 'Standar Mutu & Keamanan' },
-              { value: '-18°C', label: 'Rantai Dingin Terkendali' },
+              { value: '-18°C', label: 'Cold Chain Terkendali' },
               { value: 'Bali & Jogja', label: 'Hub Distribusi Aktif' },
               { value: 'Ekspansi 2027', label: 'Peta Jalan Jawa Barat' },
             ].map((stat, i) => (

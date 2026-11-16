@@ -54,7 +54,7 @@ export default function KebijakanPrivasiPage() {
             </p>
             <ul className="list-disc pl-5 space-y-1">
               <li>Menghubungkan Anda dengan admin penjualan melalui WhatsApp resmi HATOBA.</li>
-              <li>Memvalidasi cakupan area pengiriman rantai dingin (hub Bali dan Yogyakarta).</li>
+              <li>Memvalidasi cakupan area pengiriman Cold Chain (hub Bali dan Yogyakarta).</li>
               <li>Mencatat riwayat inquiry pemesanan agar pelayanan B2B dapat berlangsung konsisten.</li>
             </ul>
 

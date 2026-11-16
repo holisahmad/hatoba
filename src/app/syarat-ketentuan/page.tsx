@@ -36,7 +36,7 @@ export default function SyaratKetentuanPage() {
               dan biaya pengiriman resmi disahkan melalui komunikasi terverifikasi WhatsApp bisnis kami.
             </p>
 
-            <h3 className="text-lg font-bold text-[#111613]">2. Standar Penanganan Rantai Dingin (-18°C)</h3>
+            <h3 className="text-lg font-bold text-[#111613]">2. Standar Penanganan Cold Chain (-18°C)</h3>
             <p>
               Seluruh produk kami dibekukan pada suhu minimal -18°C dengan kemasan vacuum seal. Mitra pembeli
               wajib menyediakan fasilitas penyimpanan beku (freezer) saat barang diterima untuk mencegah

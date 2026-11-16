@@ -124,7 +124,7 @@ export default function FrozenFoodPage() {
             <div className="flex items-center gap-3">
               <span className="block w-10 h-px bg-[#C59B47]" />
               <span className="text-[#9D772A] text-xs uppercase tracking-[0.3em] font-semibold">
-                Divisi Komersial Pangan & Rantai Dingin
+                Divisi Komersial Pangan & Cold Chain
               </span>
             </div>
             <h1 className="font-serif-title text-4xl sm:text-5xl lg:text-6xl font-bold text-[#111613] leading-tight">
@@ -132,7 +132,7 @@ export default function FrozenFoodPage() {
               <span className="gold-shimmer italic font-normal">HATOBA Frozen Food</span>
             </h1>
             <p className="text-[#48564F] text-base sm:text-lg leading-relaxed font-light">
-              Pemasok terpercaya jeroan dan daging sapi higienis berstandar rantai dingin (-18°C) untuk
+              Pemasok terpercaya jeroan dan daging sapi higienis berstandar Cold Chain (-18°C) untuk
               Hotel, Restoran, Katering, dan Kafe (HORECA) dengan jangkauan operasional resmi di Bali &
               Yogyakarta.
             </p>
@@ -143,7 +143,7 @@ export default function FrozenFoodPage() {
               </div>
               <div className="flex items-center gap-2 text-[#8C6B24]">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#C59B47]" />
-                <span className="text-[#48564F]">Pengiriman Rantai Dingin Terjadwal</span>
+                <span className="text-[#48564F]">Pengiriman Cold Chain Terjadwal</span>
               </div>
               <div className="flex items-center gap-2 text-[#8C6B24]">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#C59B47]" />

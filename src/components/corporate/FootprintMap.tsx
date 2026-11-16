@@ -37,7 +37,7 @@ export default function FootprintMap() {
 
           <p className="text-[#48564F] text-sm sm:text-base leading-relaxed">
             Transformasi HATOBA Group dari pemasok bahan baku beku higienis menjadi grup usaha terpadu
-            dengan infrastruktur rantai dingin mandiri, fasilitas pemrosesan terstandarisasi, dan jangkauan regional yang terpercaya.
+            dengan infrastruktur Cold Chain mandiri, fasilitas pemrosesan terstandarisasi, dan jangkauan regional yang terpercaya.
           </p>
         </div>
 
@@ -121,7 +121,7 @@ export default function FootprintMap() {
               </div>
               <p className="text-[#5C6E65] leading-relaxed text-[11px]">
                 Distribusi reguler saat ini diprioritaskan untuk mitra B2B di Bali dan Yogyakarta.
-                Pengiriman di luar hub aktif dilayani melalui skema kargo rantai dingin khusus dengan konfirmasi admin.
+                Pengiriman di luar hub aktif dilayani melalui skema kargo Cold Chain khusus dengan konfirmasi admin.
               </p>
             </div>
           </div>

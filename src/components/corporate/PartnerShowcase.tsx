@@ -54,7 +54,7 @@ export default function PartnerShowcase() {
           </div>
 
           <p className="text-[#48564F] text-sm sm:text-base leading-relaxed font-light">
-            Mulai dari rumah makan tradisional legendaris, resto spesialis bakaran, katering, hingga gerai ritel pangan mengandalkan kualitas konsisten dan standar rantai dingin HATOBA Frozen Food setiap hari.
+            Mulai dari rumah makan tradisional legendaris, resto spesialis bakaran, katering, hingga gerai ritel pangan mengandalkan kualitas konsisten dan standar Cold Chain HATOBA Frozen Food setiap hari.
           </p>
         </div>
 

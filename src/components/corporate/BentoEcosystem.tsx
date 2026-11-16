@@ -103,7 +103,7 @@ export default function BentoEcosystem() {
 
                 <div className="lg:col-span-5 bg-[#FAF8F5] p-6 rounded-2xl border border-[#EAE4DC] space-y-3">
                   <div className="text-xs font-semibold text-[#8C6B24] uppercase tracking-wider">
-                    Keunggulan Rantai Dingin:
+                    Keunggulan Cold Chain:
                   </div>
                   <div className="space-y-2">
                     {BUSINESS_UNITS[0].highlights.map((h, i) => (

@@ -196,7 +196,7 @@ export default function Footer() {
               <li className="pt-2">
                 <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-dark/40 border border-emerald-light/40 text-[11px] text-gray-300">
                   <ShieldCheck className="w-4 h-4 text-gold flex-shrink-0" />
-                  <span>Jaminan Rantai Dingin Higienis & Standar Keamanan Pangan</span>
+                  <span>Jaminan Cold Chain Higienis & Standar Keamanan Pangan</span>
                 </div>
               </li>
             </ul>
@@ -207,7 +207,7 @@ export default function Footer() {
         <div className="py-6 border-t border-white/10 text-xs text-gray-500 leading-relaxed space-y-2">
           <p>
             <strong className="text-gray-400">Pernyataan Wilayah Layanan & Kepatuhan:</strong>{' '}
-            Cakupan layanan distribusi rantai dingin HATOBA Frozen Food saat ini berpusat di wilayah operasional resmi
+            Cakupan layanan distribusi Cold Chain HATOBA Frozen Food saat ini berpusat di wilayah operasional resmi
             Bali dan Yogyakarta. Pengembangan wilayah Jawa Barat (Bandung) dijadwalkan pada roadmap tahun 2027.
           </p>
         </div>
