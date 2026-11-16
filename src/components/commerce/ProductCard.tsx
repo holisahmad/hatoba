@@ -145,7 +145,7 @@ export default function ProductCard({ product }: ProductCardProps) {
         </div>
 
         {/* Content Body */}
-        <div className="p-6 sm:p-7">
+        <div className="p-4 sm:p-6">
           <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
             <span className="uppercase tracking-wider font-medium text-[10px] text-gold">{product.category}</span>
             <span className="text-[#0D281E] font-semibold flex items-center gap-1 text-[11px]">
@@ -240,7 +240,7 @@ export default function ProductCard({ product }: ProductCardProps) {
       </div>
 
       {/* Footer / Add to Cart CTA */}
-      <div className="p-6 sm:p-7 pt-0 border-t border-gray-100 mt-2">
+      <div className="p-4 sm:p-6 pt-0 border-t border-gray-100 mt-2">
         {isInCart ? (
           /* ── State: Sudah ada di keranjang — tampilkan counter inline ── */
           <div className="flex flex-col gap-2.5 pt-4">
