@@ -79,11 +79,27 @@ export async function POST(request: Request) {
       createdBy,
     } = body
 
-    if (!date || !type || !category || !account || !amount || !recipientOrPayer) {
+    if (!date || !type || !category || !account || amount === undefined || amount === null || !recipientOrPayer) {
       return NextResponse.json(
         { error: 'Data transaksi tidak lengkap. Pastikan tanggal, tipe, kategori, akun, nominal, dan nama pihak terkait terisi.' },
         { status: 400 }
       )
+    }
+
+    const parsedAmount = Number(amount)
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      return NextResponse.json(
+        { error: 'Nominal transaksi wajib berupa angka positif lebih dari nol.' },
+        { status: 400 }
+      )
+    }
+
+    if (!['IN', 'OUT'].includes(type)) {
+      return NextResponse.json({ error: 'Tipe transaksi harus IN atau OUT.' }, { status: 400 })
+    }
+
+    if (!['KAS', 'BANK_MANDIRI'].includes(account)) {
+      return NextResponse.json({ error: 'Akun keuangan harus KAS atau BANK_MANDIRI.' }, { status: 400 })
     }
 
     const newTx = await addFinanceTransaction({

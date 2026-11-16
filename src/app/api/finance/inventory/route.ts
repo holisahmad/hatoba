@@ -19,8 +19,12 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { totalWeightKg, estimatedValue, notes, date, inspector, freezerTempCelsius } = body
 
-    if (typeof estimatedValue !== 'number') {
-      return NextResponse.json({ error: 'Nilai taksiran persediaan wajib berupa angka.' }, { status: 400 })
+    if (typeof estimatedValue !== 'number' || isNaN(estimatedValue) || estimatedValue < 0) {
+      return NextResponse.json({ error: 'Nilai taksiran persediaan wajib berupa angka positif atau nol.' }, { status: 400 })
+    }
+
+    if (totalWeightKg !== undefined && Number(totalWeightKg) < 0) {
+      return NextResponse.json({ error: 'Berat fisik persediaan tidak boleh negatif.' }, { status: 400 })
     }
 
     const snapshot = await updateInventorySnapshot(
