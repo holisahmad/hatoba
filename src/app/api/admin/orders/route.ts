@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { getAdminOrders, updateAdminOrderStatus, markOrderAsPaid, addAdminOrder, OrderStatus, AdminOrder } from '@/lib/admin-store'
+import { getAdminOrders, updateAdminOrderStatus, markOrderAsPaid, recordOrderPayment, addAdminOrder, OrderStatus, AdminOrder } from '@/lib/admin-store'
 import { generateReferenceCode } from '@/lib/whatsapp'
 
 async function checkAuth(): Promise<boolean> {
@@ -106,29 +106,35 @@ export async function PATCH(request: Request) {
       totalAmount,
       adjustmentNotes,
       action,
+      paymentMode,
       paymentMethod,
       paidAmount,
       paymentStatus,
+      dueDate,
     } = body
 
-    // 1. Dedicated Action: Mark as Paid (LUNAS)
-    if (action === 'MARK_PAID') {
+    // 1. Dedicated Action: Record / Update Payment (POS style: Lunas, DP, Campuran, Tempo)
+    if (action === 'UPDATE_PAYMENT' || action === 'MARK_PAID') {
       if (!referenceCode) {
         return NextResponse.json({ error: 'Kode referensi pesanan wajib diisi.' }, { status: 400 })
       }
 
-      const paidOrder = await markOrderAsPaid(referenceCode, {
-        paymentMethod: paymentMethod || 'Transfer BCA',
+      const mode = paymentMode || (action === 'MARK_PAID' ? 'LUNAS_TRANSFER' : 'LUNAS_TRANSFER')
+
+      const updatedPaymentOrder = await recordOrderPayment(referenceCode, {
+        paymentMode: mode,
+        paymentMethod: paymentMethod || undefined,
         paidAmount: typeof paidAmount === 'number' ? paidAmount : undefined,
-        adminUser: adminUser || 'Admin Keuangan',
+        dueDate: typeof dueDate === 'string' ? dueDate : undefined,
         notes: notes || '',
+        adminUser: adminUser || 'Admin Keuangan',
       })
 
-      if (!paidOrder) {
+      if (!updatedPaymentOrder) {
         return NextResponse.json({ error: 'Pesanan tidak ditemukan.' }, { status: 404 })
       }
 
-      return NextResponse.json({ success: true, order: paidOrder })
+      return NextResponse.json({ success: true, order: updatedPaymentOrder })
     }
 
     // 2. Standard Status or Stock Adjustment Update

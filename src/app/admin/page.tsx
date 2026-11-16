@@ -63,6 +63,7 @@ export interface CustomerProfile {
   loyaltyLabel: string
   orders: AdminOrder[]
   needsFollowUp: boolean
+  overdueOrdersCount: number
 }
 
 export default function AdminPage() {
@@ -86,9 +87,12 @@ export default function AdminPage() {
   const [orderSearchQuery, setOrderSearchQuery] = useState('')
   const [selectedOrderForPrint, setSelectedOrderForPrint] = useState<AdminOrder | null>(null)
 
-  // Mark as Paid (LUNAS) Modal
+  // Payment Management Modal (POS Style: Lunas Tunai/Transfer, DP, Campuran, Tempo)
   const [orderToMarkPaid, setOrderToMarkPaid] = useState<AdminOrder | null>(null)
+  const [payMode, setPayMode] = useState<'LUNAS_TRANSFER' | 'LUNAS_TUNAI' | 'DP' | 'CAMPURAN' | 'TEMPO'>('LUNAS_TRANSFER')
   const [payMethodInput, setPayMethodInput] = useState('Transfer BCA')
+  const [payAmountInput, setPayAmountInput] = useState('')
+  const [payDueDateInput, setPayDueDateInput] = useState('')
   const [payNotesInput, setPayNotesInput] = useState('')
   const [payLoading, setPayLoading] = useState(false)
 
@@ -260,19 +264,58 @@ export default function AdminPage() {
     }
   }
 
-  // Handle Confirm Mark as Paid (LUNAS)
+  // Handle Open Payment Management Modal
+  const openPaymentModal = (ord: AdminOrder) => {
+    setOrderToMarkPaid(ord)
+    const initialMode: 'LUNAS_TRANSFER' | 'LUNAS_TUNAI' | 'DP' | 'CAMPURAN' | 'TEMPO' =
+      ord.paymentStatus === 'LUNAS'
+        ? (ord.paymentMethod?.toLowerCase().includes('tunai') ? 'LUNAS_TUNAI' : 'LUNAS_TRANSFER')
+        : ord.paymentStatus === 'DP'
+        ? (ord.paymentMethod?.toLowerCase().includes('tempo') ? 'CAMPURAN' : 'DP')
+        : ord.paymentStatus === 'TEMPO'
+        ? 'TEMPO'
+        : 'LUNAS_TRANSFER'
+
+    setPayMode(initialMode)
+    setPayMethodInput(
+      ord.paymentMethod?.includes('Mandiri')
+        ? 'Transfer Mandiri'
+        : ord.paymentMethod?.includes('BCA')
+        ? 'Transfer BCA'
+        : ord.paymentMethod?.includes('Tunai')
+        ? 'Tunai / Cash'
+        : 'Transfer BCA'
+    )
+    setPayAmountInput(String(ord.paidAmount || ord.totalAmount))
+    setPayDueDateInput(
+      ord.dueDate
+        ? ord.dueDate.slice(0, 10)
+        : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    )
+    setPayNotesInput(ord.statusNotes || '')
+  }
+
+  // Handle Confirm Update Payment (POS style: Lunas Tunai/Transfer, DP, Campuran, Tempo)
   const handleConfirmMarkPaid = async () => {
     if (!orderToMarkPaid) return
     setPayLoading(true)
+
+    const rawAmount = parseFloat(payAmountInput.replace(/[^0-9]/g, '')) || 0
+    let computedAmount = rawAmount
+    if (payMode === 'LUNAS_TRANSFER') computedAmount = orderToMarkPaid.totalAmount
+    if (payMode === 'TEMPO') computedAmount = 0
+
     try {
       const res = await fetch('/api/admin/orders', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           referenceCode: orderToMarkPaid.referenceCode,
-          action: 'MARK_PAID',
+          action: 'UPDATE_PAYMENT',
+          paymentMode: payMode,
           paymentMethod: payMethodInput,
-          paidAmount: orderToMarkPaid.totalAmount,
+          paidAmount: computedAmount,
+          dueDate: payDueDateInput ? new Date(payDueDateInput).toISOString() : undefined,
           notes: payNotesInput.trim() || undefined,
           adminUser: 'Admin Keuangan',
         }),
@@ -281,7 +324,7 @@ export default function AdminPage() {
       const data = await res.json()
       if (res.ok && data.success && data.order) {
         showToast(
-          `Pesanan ${orderToMarkPaid.referenceCode} berhasil ditandai LUNAS via ${payMethodInput}!`,
+          `Status pembayaran ${orderToMarkPaid.referenceCode} berhasil diperbarui!`,
           'success'
         )
         setOrders((prev) =>
@@ -300,7 +343,7 @@ export default function AdminPage() {
         showToast(data.error || 'Gagal mengubah status pembayaran.', 'error')
       }
     } catch {
-      showToast('Terjadi kesalahan jaringan saat memproses pelunasan.', 'error')
+      showToast('Terjadi kesalahan jaringan saat memproses pembayaran.', 'error')
     } finally {
       setPayLoading(false)
     }
@@ -600,6 +643,15 @@ export default function AdminPage() {
         loyaltyLabel = 'Mitra Reguler'
       }
 
+      // Track record of overdue payments
+      const overdueOrdersCount = sortedOrders.filter((o) => {
+        if (o.paymentStatus === 'LUNAS' || o.status === 'REJECTED') return false
+        const dDate =
+          o.dueDate ||
+          new Date(new Date(o.createdAt).getTime() + 3 * 24 * 60 * 60 * 1000).toISOString()
+        return now > new Date(dDate).getTime()
+      }).length
+
       profiles.push({
         id: `cust-${key}`,
         name: entry.name,
@@ -617,6 +669,7 @@ export default function AdminPage() {
         loyaltyLabel,
         orders: sortedOrders,
         needsFollowUp: daysSince >= 7,
+        overdueOrdersCount,
       })
     })
 
@@ -1364,6 +1417,38 @@ export default function AdminPage() {
                                 )}
                               </div>
 
+                              {/* Due Date & Overdue Badge */}
+                              {(() => {
+                                const isPaid = ord.paymentStatus === 'LUNAS'
+                                const dDate =
+                                  ord.dueDate ||
+                                  new Date(new Date(ord.createdAt).getTime() + 3 * 24 * 60 * 60 * 1000).toISOString()
+                                const isOverdue =
+                                  !isPaid &&
+                                  ord.status !== 'REJECTED' &&
+                                  Date.now() > new Date(dDate).getTime()
+                                const daysOverdue = isOverdue
+                                  ? Math.max(
+                                      1,
+                                      Math.floor((Date.now() - new Date(dDate).getTime()) / (1000 * 60 * 60 * 24))
+                                    )
+                                  : 0
+
+                                return (
+                                  <div className="pt-0.5 space-y-0.5">
+                                    <span className="block text-[10px] text-gray-500">
+                                      Jatuh Tempo: {new Date(dDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                                    </span>
+                                    {isOverdue && (
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-200 text-rose-900 border border-rose-300">
+                                        <AlertCircle className="w-2.5 h-2.5 text-rose-700" />
+                                        <span>Terlambat {daysOverdue} Hari</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                )
+                              })()}
+
                               {ord.adjustmentNotes && (
                                 <span className="inline-block px-2 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
                                   Stok Disesuaikan
@@ -1390,19 +1475,19 @@ export default function AdminPage() {
                                 </button>
                               )}
 
-                              {/* Tandai Lunas Button (if verified or pending but payment not yet Lunas) */}
-                              {ord.paymentStatus !== 'LUNAS' && ord.status !== 'REJECTED' && (
+                              {/* Payment Button (opens POS-style payment modal: Lunas Tunai/Transfer, DP, Campuran, Tempo) */}
+                              {ord.status !== 'REJECTED' && (
                                 <button
-                                  onClick={() => {
-                                    setOrderToMarkPaid(ord)
-                                    setPayMethodInput(ord.paymentMethod || 'Transfer BCA')
-                                    setPayNotesInput('')
-                                  }}
-                                  title="Tandai pembayaran telah diterima oleh konsumen (LUNAS)"
-                                  className="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold transition-all shadow-sm flex items-center gap-1"
+                                  onClick={() => openPaymentModal(ord)}
+                                  title="Kelola pembayaran (Lunas Tunai/Transfer, DP, Campuran, Tempo, Batas Pembayaran)"
+                                  className={`px-2.5 py-1 rounded-lg text-white text-[11px] font-bold transition-all shadow-sm flex items-center gap-1 ${
+                                    ord.paymentStatus === 'LUNAS'
+                                      ? 'bg-emerald-800 hover:bg-emerald-900'
+                                      : 'bg-emerald-600 hover:bg-emerald-700'
+                                  }`}
                                 >
                                   <CreditCard className="w-3 h-3" />
-                                  <span>Tandai Lunas</span>
+                                  <span>{ord.paymentStatus === 'LUNAS' ? 'Ubah Bayar' : 'Atur Bayar'}</span>
                                 </button>
                               )}
 
@@ -1682,7 +1767,7 @@ export default function AdminPage() {
                               </a>
                             </td>
 
-                            {/* Tingkat Loyalitas */}
+                            {/* Tingkat Loyalitas & Track Record */}
                             <td className="py-4 px-4 align-top">
                               {cust.loyaltyTier === 'VIP' ? (
                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
@@ -1699,6 +1784,20 @@ export default function AdminPage() {
                                   <span>{cust.loyaltyLabel}</span>
                                 </span>
                               )}
+
+                              {/* Track Record Kedisiplinan Pembayaran */}
+                              <div className="pt-1">
+                                {cust.overdueOrdersCount > 0 ? (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                                    <AlertCircle className="w-2.5 h-2.5 text-rose-700" />
+                                    <span>{cust.overdueOrdersCount} Tagihan Terlambat</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-[9px] text-emerald-700 font-medium block">
+                                    ✓ Pembayaran Tertib
+                                  </span>
+                                )}
+                              </div>
                             </td>
 
                             {/* Total Transaksi & Belanja */}
@@ -2778,25 +2877,23 @@ export default function AdminPage() {
           onClose={() => setSelectedOrderForPrint(null)}
           onMarkPaid={(ord) => {
             setSelectedOrderForPrint(null)
-            setOrderToMarkPaid(ord)
-            setPayMethodInput(ord.paymentMethod || 'Transfer BCA')
-            setPayNotesInput('')
+            openPaymentModal(ord)
           }}
         />
       )}
 
-      {/* ======================= MODAL: PELUNASAN TAGIHAN (MARK AS PAID) ======================= */}
+      {/* ======================= MODAL: KELOLA PEMBAYARAN (POS STYLE) ======================= */}
       {orderToMarkPaid && (
         <div className="fixed inset-0 z-[75] bg-black/65 backdrop-blur-sm overflow-y-auto p-4 flex justify-center items-center">
-          <div className="relative max-w-md w-full bg-white rounded-3xl p-6 sm:p-7 border border-[#E8DFD5] shadow-2xl space-y-4 my-auto">
-            <div className="flex items-start justify-between border-b border-gray-100 pb-3">
+          <div className="relative max-w-lg w-full bg-white rounded-3xl p-6 sm:p-7 border border-[#E8DFD5] shadow-2xl space-y-4 my-auto max-h-[92vh] flex flex-col overflow-hidden">
+            <div className="flex items-start justify-between border-b border-gray-100 pb-3 flex-shrink-0">
               <div>
                 <h4 className="font-serif-title text-lg font-bold text-[#111613] flex items-center gap-2">
                   <CreditCard className="w-5 h-5 text-emerald-600" />
-                  <span>Pelunasan Tagihan Pembayaran</span>
+                  <span>Kelola Status Pembayaran</span>
                 </h4>
                 <p className="text-xs text-gray-500">
-                  Ubah status tagihan pesanan menjadi LUNAS setelah pembayaran diterima
+                  Dukung pembayaran Cash Lunas, Transfer Lunas, DP, Sebagian Tempo, dan Full Tempo
                 </p>
               </div>
               <button
@@ -2808,61 +2905,267 @@ export default function AdminPage() {
               </button>
             </div>
 
-            {/* Order Details Summary */}
-            <div className="p-3.5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-1.5 text-xs">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Nomor Referensi:</span>
-                <span className="font-mono font-bold text-[#8C6B24]">{orderToMarkPaid.referenceCode}</span>
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+              {/* Order Details Summary */}
+              <div className="p-3.5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-1.5 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Nomor Referensi:</span>
+                  <span className="font-mono font-bold text-[#8C6B24]">{orderToMarkPaid.referenceCode}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Nama Pelanggan:</span>
+                  <span className="font-semibold text-[#111613]">
+                    {orderToMarkPaid.customerName}{' '}
+                    {orderToMarkPaid.businessName ? `(${orderToMarkPaid.businessName})` : ''}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center pt-1 border-t border-gray-200">
+                  <span className="text-gray-600 font-bold">Total Nilai Pesanan:</span>
+                  <span className="font-mono font-bold text-base text-emerald-800">
+                    {formatIDR(orderToMarkPaid.totalAmount)}
+                  </span>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Nama Pelanggan:</span>
-                <span className="font-semibold text-[#111613]">
-                  {orderToMarkPaid.customerName}{' '}
-                  {orderToMarkPaid.businessName ? `(${orderToMarkPaid.businessName})` : ''}
-                </span>
+
+              {/* 5 Payment Modes (Pill Buttons) */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-gray-700 block">
+                  Pilih Skema / Metode Pembayaran:
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPayMode('LUNAS_TRANSFER')
+                      setPayMethodInput('Transfer BCA')
+                      setPayAmountInput(String(orderToMarkPaid.totalAmount))
+                    }}
+                    className={`p-2.5 rounded-xl border text-left text-xs transition-all ${
+                      payMode === 'LUNAS_TRANSFER'
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-950 font-bold shadow-xs'
+                        : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    <div className="font-bold flex items-center gap-1">
+                      <span>💳 Transfer Lunas</span>
+                    </div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">BCA / Mandiri / QRIS</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPayMode('LUNAS_TUNAI')
+                      setPayMethodInput('Tunai / Cash')
+                      setPayAmountInput(String(orderToMarkPaid.totalAmount))
+                    }}
+                    className={`p-2.5 rounded-xl border text-left text-xs transition-all ${
+                      payMode === 'LUNAS_TUNAI'
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-950 font-bold shadow-xs'
+                        : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    <div className="font-bold flex items-center gap-1">
+                      <span>💵 Tunai Lunas</span>
+                    </div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">Uang pas / ada kembalian</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPayMode('DP')
+                      setPayMethodInput('Transfer BCA')
+                      setPayAmountInput(String(Math.round(orderToMarkPaid.totalAmount * 0.3)))
+                    }}
+                    className={`p-2.5 rounded-xl border text-left text-xs transition-all ${
+                      payMode === 'DP'
+                        ? 'border-amber-500 bg-amber-50 text-amber-950 font-bold shadow-xs'
+                        : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    <div className="font-bold flex items-center gap-1">
+                      <span>🪙 Uang Muka (DP)</span>
+                    </div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">Sisa tagihan dicicil</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPayMode('CAMPURAN')
+                      setPayMethodInput('Tunai / Cash')
+                      setPayAmountInput(String(Math.round(orderToMarkPaid.totalAmount * 0.5)))
+                    }}
+                    className={`p-2.5 rounded-xl border text-left text-xs transition-all ${
+                      payMode === 'CAMPURAN'
+                        ? 'border-blue-500 bg-blue-50 text-blue-950 font-bold shadow-xs'
+                        : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    <div className="font-bold flex items-center gap-1">
+                      <span>⚖️ Sebagian + Tempo</span>
+                    </div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">Bayar awal + tempo B2B</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPayMode('TEMPO')
+                      setPayMethodInput('Full Tempo B2B')
+                      setPayAmountInput('0')
+                    }}
+                    className={`p-2.5 rounded-xl border text-left text-xs transition-all col-span-2 sm:col-span-1 ${
+                      payMode === 'TEMPO'
+                        ? 'border-orange-500 bg-orange-50 text-orange-950 font-bold shadow-xs'
+                        : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
+                    }`}
+                  >
+                    <div className="font-bold flex items-center gap-1">
+                      <span>⏳ Full Tempo B2B</span>
+                    </div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">Bayar saat jatuh tempo</div>
+                  </button>
+                </div>
               </div>
-              <div className="flex justify-between items-center pt-1 border-t border-gray-200">
-                <span className="text-gray-600 font-bold">Total Tagihan:</span>
-                <span className="font-mono font-bold text-base text-emerald-800">
-                  {formatIDR(orderToMarkPaid.totalAmount)}
-                </span>
+
+              {/* Mode Specific Inputs */}
+              {payMode === 'LUNAS_TRANSFER' && (
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-700 block">
+                    Pilih Rekening Transfer Masuk:
+                  </label>
+                  <select
+                    value={payMethodInput}
+                    onChange={(e) => setPayMethodInput(e.target.value)}
+                    className="w-full p-2.5 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs font-semibold focus:outline-none focus:border-emerald-600"
+                  >
+                    <option value="Transfer BCA">Transfer BCA (772-512-8899 a.n PT HATOBA PANGAN NUSANTARA)</option>
+                    <option value="Transfer Mandiri">Transfer Mandiri (137-00-198822-1 a.n HATOBA FROZEN FOOD)</option>
+                    <option value="Transfer Bank Lain">Transfer Bank Lain (Antar Bank)</option>
+                    <option value="QRIS">QRIS Standar</option>
+                  </select>
+                </div>
+              )}
+
+              {payMode === 'LUNAS_TUNAI' && (
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-700 block">
+                      Nominal Uang Tunai Diterima (Rp):
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="Masukkan jumlah uang tunai dari konsumen..."
+                      value={payAmountInput}
+                      onChange={(e) => setPayAmountInput(e.target.value)}
+                      className="w-full p-2.5 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs font-mono font-bold focus:outline-none focus:border-emerald-600"
+                    />
+                  </div>
+                  {(() => {
+                    const parsed = parseFloat(payAmountInput) || 0
+                    const kembalian = Math.max(0, parsed - orderToMarkPaid.totalAmount)
+                    return (
+                      <div className="p-2.5 rounded-xl bg-gray-50 border border-gray-200 flex justify-between text-xs">
+                        <span className="text-gray-600">Uang Kembalian:</span>
+                        <span className="font-mono font-bold text-emerald-800">{formatIDR(kembalian)}</span>
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+
+              {(payMode === 'DP' || payMode === 'CAMPURAN') && (
+                <div className="space-y-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-gray-700 block">
+                        Metode Pembayaran di Awal:
+                      </label>
+                      <select
+                        value={payMethodInput}
+                        onChange={(e) => setPayMethodInput(e.target.value)}
+                        className="w-full p-2.5 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs font-semibold focus:outline-none focus:border-emerald-600"
+                      >
+                        <option value="Transfer BCA">Transfer BCA</option>
+                        <option value="Transfer Mandiri">Transfer Mandiri</option>
+                        <option value="Tunai / Cash">Tunai / Cash</option>
+                        <option value="QRIS">QRIS</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-gray-700 block">
+                        Nominal Dibayar (Rp):
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="Jumlah yang dibayar..."
+                        value={payAmountInput}
+                        onChange={(e) => setPayAmountInput(e.target.value)}
+                        className="w-full p-2.5 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs font-mono font-bold focus:outline-none focus:border-emerald-600"
+                      />
+                    </div>
+                  </div>
+
+                  {(() => {
+                    const parsed = parseFloat(payAmountInput) || 0
+                    const sisa = Math.max(0, orderToMarkPaid.totalAmount - parsed)
+                    return (
+                      <div className="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200 flex justify-between text-xs">
+                        <span className="text-amber-900 font-semibold">
+                          {payMode === 'CAMPURAN' ? 'Sisa Masuk Tempo B2B:' : 'Sisa Tagihan (Piutang):'}
+                        </span>
+                        <span className="font-mono font-bold text-amber-950">{formatIDR(sisa)}</span>
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+
+              {payMode === 'TEMPO' && (
+                <div className="p-3 rounded-xl bg-orange-50 border border-orange-200 text-xs text-orange-950 space-y-1">
+                  <div className="font-bold">Full Tempo B2B untuk Mitra Restoran:</div>
+                  <p className="text-[11px] text-orange-900 leading-relaxed">
+                    Seluruh nominal sebesar <strong>{formatIDR(orderToMarkPaid.totalAmount)}</strong> dicatat sebagai piutang jatuh tempo.
+                  </p>
+                </div>
+              )}
+
+              {/* Batas Waktu Pembayaran (Jatuh Tempo) */}
+              <div className="space-y-1 pt-1">
+                <label className="text-xs font-bold text-gray-700 block">
+                  Batas Waktu Pelunasan / Jatuh Tempo:
+                </label>
+                <input
+                  type="date"
+                  value={payDueDateInput}
+                  onChange={(e) => setPayDueDateInput(e.target.value)}
+                  className="w-full p-2.5 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs font-semibold focus:outline-none focus:border-emerald-600"
+                />
+                <p className="text-[10px] text-gray-500">
+                  Tanggal ini dicetak pada Invoice &amp; Nota. Jika lewat dan belum lunas, sistem otomatis menandai status <strong>Terlambat</strong> sebagai rekam jejak konsumen.
+                </p>
+              </div>
+
+              {/* Notes Input */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-700 block">
+                  Catatan Pembayaran (Opsional):
+                </label>
+                <input
+                  type="text"
+                  placeholder="Misal: Bukti transfer BCA a.n Hendra jam 14:15, tempo disetujui 7 hari"
+                  value={payNotesInput}
+                  onChange={(e) => setPayNotesInput(e.target.value)}
+                  className="w-full p-2.5 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs focus:outline-none focus:border-emerald-600"
+                />
               </div>
             </div>
 
-            {/* Payment Method Selector */}
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-gray-700 block">
-                Pilih Rekening / Metode Pembayaran Masuk:
-              </label>
-              <select
-                value={payMethodInput}
-                onChange={(e) => setPayMethodInput(e.target.value)}
-                className="w-full p-2.5 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs font-semibold focus:outline-none focus:border-emerald-600"
-              >
-                <option value="Transfer BCA">Transfer BCA (772-512-8899 a.n PT HATOBA PANGAN NUSANTARA)</option>
-                <option value="Transfer Mandiri">Transfer Mandiri (137-00-198822-1 a.n HATOBA FROZEN FOOD)</option>
-                <option value="Transfer Bank Lain">Transfer Bank Lain (Antar Bank)</option>
-                <option value="Tunai / Cash">Tunai / Cash Kasir</option>
-                <option value="QRIS">QRIS Standar</option>
-              </select>
-            </div>
-
-            {/* Notes Input */}
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-gray-700 block">
-                Catatan Pelunasan / Bukti Transfer:
-              </label>
-              <input
-                type="text"
-                placeholder="Misal: Bukti transfer BCA atas nama Ibu Siti, jam 14:15"
-                value={payNotesInput}
-                onChange={(e) => setPayNotesInput(e.target.value)}
-                className="w-full p-2.5 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs focus:outline-none focus:border-emerald-600"
-              />
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-gray-100">
+            {/* Actions Footer */}
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100 flex-shrink-0">
               <button
                 type="button"
                 onClick={() => setOrderToMarkPaid(null)}
@@ -2874,10 +3177,10 @@ export default function AdminPage() {
                 type="button"
                 disabled={payLoading}
                 onClick={handleConfirmMarkPaid}
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20 disabled:opacity-50 flex items-center gap-1.5"
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20 disabled:opacity-50 flex items-center gap-1.5"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>{payLoading ? 'Memproses...' : 'Konfirmasi LUNAS'}</span>
+                <span>{payLoading ? 'Menyimpan...' : 'Simpan Pembayaran'}</span>
               </button>
             </div>
           </div>

@@ -101,6 +101,7 @@ export async function POST(request: Request) {
       paidAmount: 0,
       paymentMethod: 'Transfer / Menunggu Tagihan',
       statusNotes: 'Pesanan Web — Menunggu Cek Stok & Terbit Tagihan',
+      dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
     })
 
     console.log('[ORDER LOGGED BEFORE WHATSAPP]', {

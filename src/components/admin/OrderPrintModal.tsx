@@ -114,6 +114,16 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
   const isCampuran = isDP && (order.paymentMethod || '').toLowerCase().includes('tempo')
   const isUnpaid = !isPaid && !isDP && !isTempo
 
+  // Due Date & Overdue Calculation
+  const orderDueDate =
+    order.dueDate ||
+    new Date(new Date(order.createdAt).getTime() + 3 * 24 * 60 * 60 * 1000).toISOString()
+  const now = Date.now()
+  const isOverdue = !isPaid && now > new Date(orderDueDate).getTime()
+  const daysOverdue = isOverdue
+    ? Math.max(1, Math.floor((now - new Date(orderDueDate).getTime()) / (1000 * 60 * 60 * 24)))
+    : 0
+
   // Generate WhatsApp Share Link for the customer
   const handleShareWhatsApp = () => {
     const cleanPhone = (order.phone || '').replace(/[^0-9]/g, '')
@@ -141,11 +151,19 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
       ? `\n*Catatan Penyesuaian Pesanan:*\n⚠️ ${order.adjustmentNotes}\n`
       : ''
 
+    const dueDateText = !isPaid
+      ? `*Batas Waktu Pembayaran (Jatuh Tempo):* ${new Date(orderDueDate).toLocaleDateString('id-ID', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        })}${isOverdue ? ` *(⚠️ Terlambat ${daysOverdue} hari)*` : ''}\n`
+      : ''
+
     const bankPaymentInfo = !isPaid
       ? `\n*Rekening Pembayaran Resmi HATOBA:*\n• BCA: *772-512-8899* a.n PT HATOBA PANGAN NUSANTARA\n• Mandiri: *137-00-198822-1* a.n HATOBA FROZEN FOOD\n\n*Mohon kirimkan bukti transfer setelah pembayaran dilakukan agar pesanan segera kami jadwalkan pengiriman beku −18°C.*\n`
       : ''
 
-    const message = `Halo ${order.customerName},\n\nBerikut rincian ${isPaid ? 'Faktur Lunas / Kuitansi' : 'Faktur Tagihan (Invoice)'} dari *HATOBA Frozen Food*:\n\n*Nomor Invoice:* INV-${order.referenceCode}\n*Status:* *${statusText}*\n*Tujuan:* ${order.businessName || order.customerName} (${order.city})\n\n*Rincian Pesanan:*\n${itemsSummary}\n${adjustmentText}\n*Total Tagihan:* *${formatIDR(order.totalAmount)}*\n*Metode:* ${order.paymentMethod || (isPaid ? 'Lunas' : 'Transfer BCA / Mandiri')}\n${bankPaymentInfo}\nTerima kasih atas kerja samanya. Pesanan Anda diproses dengan standar rantai dingin −18°C.`
+    const message = `Halo ${order.customerName},\n\nBerikut rincian ${isPaid ? 'Faktur Lunas / Kuitansi' : 'Faktur Tagihan (Invoice)'} dari *HATOBA Group*:\n\n*Nomor Invoice:* INV-${order.referenceCode}\n*Status:* *${statusText}*\n*Tujuan:* ${order.businessName || order.customerName} (${order.city})\n\n*Rincian Pesanan:*\n${itemsSummary}\n${adjustmentText}\n*Total Tagihan:* *${formatIDR(order.totalAmount)}*\n*Metode:* ${order.paymentMethod || (isPaid ? 'Lunas' : 'Transfer BCA / Mandiri')}\n${dueDateText}${bankPaymentInfo}\nTerima kasih atas kerja samanya. Pesanan Anda diproses dengan standar rantai dingin −18°C.`
 
     const waUrl = `https://wa.me/${targetPhone}?text=${encodeURIComponent(message)}`
     window.open(waUrl, '_blank')
@@ -201,16 +219,16 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2">
-            {/* Quick Mark Paid Button (if not paid yet) */}
-            {!isPaid && onMarkPaid && (
+            {/* Payment Management Button (handles POS-style: Lunas Cash/Transfer, DP, Campuran, Tempo) */}
+            {onMarkPaid && (
               <button
                 type="button"
                 onClick={() => onMarkPaid(order)}
-                title="Tandai pembayaran telah diterima (Ubah ke LUNAS)"
+                title="Kelola status pembayaran (Lunas Tunai/Transfer, DP, Campuran, Tempo)"
                 className="px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
               >
-                <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-                <span>Tandai Lunas</span>
+                <CreditCard className="w-3.5 h-3.5 text-white" />
+                <span>{isPaid ? 'Ubah Pembayaran' : 'Atur Pembayaran'}</span>
               </button>
             )}
 
@@ -290,10 +308,13 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
                   </div>
                   <div>
                     <h1 className="font-serif-title text-xl sm:text-2xl font-bold tracking-tight text-[#111613]">
-                      HATOBA FROZEN FOOD
+                      HATOBA GROUP
                     </h1>
-                    <p className="text-xs text-[#8C6B24] font-medium tracking-wide">
-                      HATOBA GROUP · JEROAN &amp; DAGING SAPI HIGIENIS
+                    <p className="text-[10px] sm:text-[11px] font-bold text-[#8C6B24] tracking-widest uppercase">
+                      Supply &amp; Distribution Trusted
+                    </p>
+                    <p className="text-xs text-gray-600 font-medium tracking-wide">
+                      Jeroan &amp; Daging Sapi Higienis Standar Cold Chain −18°C
                     </p>
                     <p className="text-[11px] text-gray-500">
                       Hub Bali &amp; D.I. Yogyakarta · WA: +62 821-7368-358
@@ -326,13 +347,32 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
                   <div className="font-mono text-sm font-bold text-[#111613]">
                     INV-{order.referenceCode}
                   </div>
-                  <div className="text-[11px] text-gray-500">
-                    Tanggal:{' '}
-                    {new Date(order.createdAt).toLocaleDateString('id-ID', {
-                      day: 'numeric',
-                      month: 'long',
-                      year: 'numeric',
-                    })}
+                  <div className="text-[11px] text-gray-600 space-y-0.5 mt-1">
+                    <div>
+                      <span className="text-gray-500">Tgl Cetak Invoice:</span>{' '}
+                      <span className="font-medium text-[#111613]">
+                        {new Date(order.verifiedAt || order.createdAt).toLocaleDateString('id-ID', {
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric',
+                        })}
+                      </span>
+                    </div>
+                    <div className={isOverdue ? 'text-rose-700 font-bold' : ''}>
+                      <span className="text-gray-500">Batas Pembayaran:</span>{' '}
+                      <span className="font-semibold">
+                        {new Date(orderDueDate).toLocaleDateString('id-ID', {
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric',
+                        })}
+                      </span>
+                      {isOverdue && (
+                        <span className="ml-1 text-[9px] uppercase px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 font-bold border border-rose-300 inline-block">
+                          Terlambat {daysOverdue} Hari
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -592,9 +632,12 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
                 style={{ margin: 0, width: 340, minWidth: 340, boxSizing: 'border-box' }}
                 className="font-mono text-xs text-[#111613] p-5 border border-dashed border-gray-400 rounded-2xl bg-[#FCFAF7] print:border-none print:p-0 print:w-full print:max-w-none shadow-sm"
               >
-                <div className="text-center space-y-1 pb-3 border-b border-dashed border-gray-400">
-                  <div className="font-bold text-base tracking-wider">HATOBA FROZEN FOOD</div>
-                  <div className="text-[10px] text-gray-600">Jeroan &amp; Daging Sapi Berkualitas Higienis</div>
+                <div className="text-center space-y-0.5 pb-3 border-b border-dashed border-gray-400">
+                  <div className="font-bold text-base tracking-wider">HATOBA GROUP</div>
+                  <div className="text-[10px] font-bold text-[#8C6B24] tracking-wider uppercase">
+                    Supply &amp; Distribution Trusted
+                  </div>
+                  <div className="text-[10px] text-gray-600">Jeroan &amp; Daging Sapi Higienis −18°C</div>
                   <div className="text-[10px] text-gray-500">
                     Hub {order.hubArea} · WA: 0821-7368-358
                   </div>
@@ -633,6 +676,17 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
                         hour: '2-digit',
                         minute: '2-digit',
                       })}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Batas Bayar:</span>
+                    <span className={isOverdue ? 'text-rose-700 font-bold' : ''}>
+                      {new Date(orderDueDate).toLocaleDateString('id-ID', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                      {isOverdue && ' (Terlambat)'}
                     </span>
                   </div>
                   <div className="flex justify-between items-start">
@@ -735,8 +789,11 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
                   </div>
                   <div>
                     <h2 className="font-serif-title text-xl font-bold tracking-tight">
-                      HATOBA GROUP · FROZEN FOOD
+                      HATOBA GROUP
                     </h2>
+                    <p className="text-[10px] sm:text-[11px] font-bold text-[#8C6B24] tracking-widest uppercase">
+                      Supply &amp; Distribution Trusted
+                    </p>
                     <p className="text-xs text-[#5C6E65]">
                       Penyedia Bahan Baku Jeroan &amp; Daging Sapi Higienis
                     </p>

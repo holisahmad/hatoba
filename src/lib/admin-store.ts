@@ -36,6 +36,7 @@ export interface AdminOrder {
   source?: 'WEB' | 'POS' | 'WHATSAPP' | 'TELEPON'
   paidAmount?: number
   changeAmount?: number
+  dueDate?: string
 }
 
 export interface AdminProduct extends ProductItem {
@@ -271,6 +272,7 @@ export async function updateAdminOrderStatus(
     paymentMethod?: string
     paidAmount?: number
     changeAmount?: number
+    dueDate?: string
   }
 ): Promise<AdminOrder | null> {
   const orders = await getAdminOrders()
@@ -279,6 +281,10 @@ export async function updateAdminOrderStatus(
 
   order.status = newStatus
   order.statusNotes = statusNotes || order.statusNotes
+
+  if (options?.dueDate) {
+    order.dueDate = options.dueDate
+  }
 
   // Handle stock adjustments if provided
   if (options?.updatedItems && options.updatedItems.length > 0) {
@@ -366,31 +372,88 @@ export async function updateAdminOrderStatus(
   return order
 }
 
-export async function markOrderAsPaid(
+export async function recordOrderPayment(
   referenceCodeOrId: string,
-  options?: {
+  options: {
+    paymentMode: 'LUNAS_TRANSFER' | 'LUNAS_TUNAI' | 'DP' | 'CAMPURAN' | 'TEMPO'
     paymentMethod?: string
     paidAmount?: number
-    adminUser?: string
+    dueDate?: string
     notes?: string
+    adminUser?: string
   }
 ): Promise<AdminOrder | null> {
   const orders = await getAdminOrders()
   const order = orders.find((o) => o.id === referenceCodeOrId || o.referenceCode === referenceCodeOrId)
   if (!order) return null
 
-  const adminUser = options?.adminUser || 'Admin'
-  const paymentMethod = options?.paymentMethod || order.paymentMethod || 'Transfer BCA'
-  const paidAmount = typeof options?.paidAmount === 'number' ? options.paidAmount : order.totalAmount
-  const notes = options?.notes || ''
+  const adminUser = options.adminUser || 'Admin Keuangan'
+  const notes = options.notes?.trim() || ''
 
-  order.paymentStatus = 'LUNAS'
-  order.paymentMethod = paymentMethod
-  order.paidAmount = paidAmount
-  order.changeAmount = Math.max(0, paidAmount - order.totalAmount)
-  order.statusNotes = notes ? `${notes} (Lunas via ${paymentMethod})` : `Pelunasan via ${paymentMethod}`
+  if (options.dueDate) {
+    order.dueDate = options.dueDate
+  }
 
-  // If order was PENDING, auto verify on payment
+  let title = 'Pembayaran Diterima'
+  let description = ''
+
+  if (options.paymentMode === 'LUNAS_TUNAI') {
+    const rawPaid = typeof options.paidAmount === 'number' ? options.paidAmount : order.totalAmount
+    order.paymentStatus = 'LUNAS'
+    order.paymentMethod = 'Tunai / Cash'
+    order.paidAmount = rawPaid
+    order.changeAmount = Math.max(0, rawPaid - order.totalAmount)
+    order.statusNotes = notes
+      ? `${notes} (Lunas Tunai)`
+      : order.changeAmount > 0
+      ? `Lunas Tunai Rp ${rawPaid.toLocaleString('id-ID')} (Kembalian Rp ${order.changeAmount.toLocaleString('id-ID')})`
+      : 'Lunas Tunai'
+    description = `Pesanan ${order.referenceCode} (${order.customerName}) Lunas Tunai Rp ${order.totalAmount.toLocaleString('id-ID')}`
+  } else if (options.paymentMode === 'LUNAS_TRANSFER') {
+    const method = options.paymentMethod || 'Transfer BCA'
+    order.paymentStatus = 'LUNAS'
+    order.paymentMethod = method
+    order.paidAmount = order.totalAmount
+    order.changeAmount = 0
+    order.statusNotes = notes ? `${notes} (Lunas ${method})` : `Lunas via ${method}`
+    description = `Pesanan ${order.referenceCode} (${order.customerName}) Lunas via ${method} Rp ${order.totalAmount.toLocaleString('id-ID')}`
+  } else if (options.paymentMode === 'DP') {
+    const dpAmount = Math.max(0, typeof options.paidAmount === 'number' ? options.paidAmount : 0)
+    const sisa = Math.max(0, order.totalAmount - dpAmount)
+    order.paymentStatus = dpAmount >= order.totalAmount ? 'LUNAS' : 'DP'
+    order.paymentMethod = options.paymentMethod ? `DP via ${options.paymentMethod}` : 'DP'
+    order.paidAmount = dpAmount
+    order.changeAmount = Math.max(0, dpAmount - order.totalAmount)
+    order.statusNotes = notes
+      ? `${notes} (DP Rp ${dpAmount.toLocaleString('id-ID')}, Sisa Rp ${sisa.toLocaleString('id-ID')})`
+      : `DP Diterima Rp ${dpAmount.toLocaleString('id-ID')}, Sisa Tagihan Rp ${sisa.toLocaleString('id-ID')}`
+    title = 'Pembayaran DP Masuk'
+    description = `Pesanan ${order.referenceCode} DP Rp ${dpAmount.toLocaleString('id-ID')}, sisa Rp ${sisa.toLocaleString('id-ID')}`
+  } else if (options.paymentMode === 'CAMPURAN') {
+    const dpAmount = Math.max(0, typeof options.paidAmount === 'number' ? options.paidAmount : 0)
+    const sisa = Math.max(0, order.totalAmount - dpAmount)
+    order.paymentStatus = dpAmount >= order.totalAmount ? 'LUNAS' : 'DP'
+    order.paymentMethod = `Bayar ${options.paymentMethod || 'Tunai/Transfer'} + Tempo B2B`
+    order.paidAmount = dpAmount
+    order.changeAmount = Math.max(0, dpAmount - order.totalAmount)
+    order.statusNotes = notes
+      ? `${notes} (Bayar di awal Rp ${dpAmount.toLocaleString('id-ID')}, Tempo Rp ${sisa.toLocaleString('id-ID')})`
+      : `Bayar Sebagian Rp ${dpAmount.toLocaleString('id-ID')} + Sisa Masuk Tempo Rp ${sisa.toLocaleString('id-ID')}`
+    title = 'Pembayaran Sebagian + Tempo'
+    description = `Pesanan ${order.referenceCode} bayar di awal Rp ${dpAmount.toLocaleString('id-ID')}, sisa tempo Rp ${sisa.toLocaleString('id-ID')}`
+  } else if (options.paymentMode === 'TEMPO') {
+    order.paymentStatus = 'TEMPO'
+    order.paymentMethod = 'Full Tempo B2B'
+    order.paidAmount = 0
+    order.changeAmount = 0
+    order.statusNotes = notes
+      ? `${notes} (Full Tempo B2B)`
+      : `Full Tempo B2B — Tagihan Rp ${order.totalAmount.toLocaleString('id-ID')}${options.dueDate ? ` (Jatuh tempo: ${options.dueDate})` : ''}`
+    title = 'Persetujuan Tempo B2B'
+    description = `Pesanan ${order.referenceCode} disetujui Full Tempo B2B jatuh tempo ${order.dueDate || '-'}`
+  }
+
+  // Ensure order is verified
   if (order.status === 'PENDING') {
     order.status = 'VERIFIED'
     order.verifiedAt = new Date().toISOString()
@@ -406,27 +469,48 @@ export async function markOrderAsPaid(
       .eq('id', order.id)
 
     if (error) {
-      console.warn('[admin-store] Supabase markOrderAsPaid error:', error.message)
+      console.warn('[admin-store] Supabase recordOrderPayment error:', error.message)
     }
   } catch (err) {
-    console.warn('[admin-store] Supabase markOrderAsPaid exception:', (err as Error).message)
+    console.warn('[admin-store] Supabase recordOrderPayment exception:', (err as Error).message)
   }
 
   await recordActivityLog({
     action: 'PAYMENT_RECEIVED',
-    title: 'Pelunasan Tagihan Diterima',
-    description: `Pesanan ${order.referenceCode} (${order.customerName}) telah LUNAS via ${paymentMethod} sebesar Rp ${paidAmount.toLocaleString('id-ID')}${notes ? ` (Catatan: "${notes}")` : ''}`,
+    title,
+    description: `${description}${notes ? ` (Catatan: "${notes}")` : ''}`,
     adminUser,
     metadata: {
       referenceCode: order.referenceCode,
-      paymentStatus: 'LUNAS',
-      paymentMethod,
-      paidAmount,
+      paymentStatus: order.paymentStatus,
+      paymentMethod: order.paymentMethod,
+      paidAmount: order.paidAmount,
       totalAmount: order.totalAmount,
+      dueDate: order.dueDate,
     },
   })
 
   return order
+}
+
+export async function markOrderAsPaid(
+  referenceCodeOrId: string,
+  options?: {
+    paymentMethod?: string
+    paidAmount?: number
+    dueDate?: string
+    adminUser?: string
+    notes?: string
+  }
+): Promise<AdminOrder | null> {
+  return recordOrderPayment(referenceCodeOrId, {
+    paymentMode: 'LUNAS_TRANSFER',
+    paymentMethod: options?.paymentMethod,
+    paidAmount: options?.paidAmount,
+    dueDate: options?.dueDate,
+    adminUser: options?.adminUser,
+    notes: options?.notes,
+  })
 }
 
 // ==================== PRODUCTS / MENU STORE (SUPABASE + CACHE) ====================
