@@ -49,36 +49,74 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
     window.print()
   }
 
-  // Export invoice / receipt DOM to PNG image file
+  // Export invoice / receipt DOM to PNG image file (Always standard A4 800px or Thermal 360px)
   const handleDownloadImage = async () => {
     if (!invoiceContainerRef.current) return
     setIsExportingImage(true)
 
+    let offscreenContainer: HTMLDivElement | null = null
+
     try {
       // Small delay to ensure layout & fonts are fully settled
-      await new Promise((r) => setTimeout(r, 300))
+      await new Promise((r) => setTimeout(r, 200))
 
       const node = invoiceContainerRef.current
 
-      // For thermal mode: use a fixed 340px width to avoid cropping.
-      // For other modes: use the actual rendered width.
+      // Target export width:
+      // Thermal: 360px (ideal proportion for 58mm/80mm POS roll)
+      // Invoice & Surat Jalan: 800px (standard A4 document proportion, crisp 1600px @ 2x)
       const isThermalMode = printMode === 'thermal'
-      const exportWidth = isThermalMode ? 340 : node.getBoundingClientRect().width
-      const exportHeight = node.scrollHeight // use scrollHeight to capture full content
+      const targetWidth = isThermalMode ? 360 : 800
 
-      const dataUrl = await toPng(node, {
+      // Clone node to an offscreen container forced at targetWidth.
+      // This ensures that even when accessed from a narrow mobile screen (360px),
+      // the exported PNG is rendered in true A4 desktop proportion with full table columns,
+      // not cramped down to mobile screen width!
+      offscreenContainer = document.createElement('div')
+      offscreenContainer.style.position = 'fixed'
+      offscreenContainer.style.top = '0'
+      offscreenContainer.style.left = '0'
+      offscreenContainer.style.width = `${targetWidth}px`
+      offscreenContainer.style.minWidth = `${targetWidth}px`
+      offscreenContainer.style.maxWidth = `${targetWidth}px`
+      offscreenContainer.style.opacity = '0'
+      offscreenContainer.style.pointerEvents = 'none'
+      offscreenContainer.style.zIndex = '-9999'
+      offscreenContainer.style.overflow = 'visible'
+      offscreenContainer.style.background = '#ffffff'
+
+      const clone = node.cloneNode(true) as HTMLElement
+      clone.style.width = `${targetWidth}px`
+      clone.style.minWidth = `${targetWidth}px`
+      clone.style.maxWidth = `${targetWidth}px`
+      clone.style.margin = '0'
+      clone.style.boxSizing = 'border-box'
+      clone.style.borderRadius = isThermalMode ? '16px' : '24px'
+      clone.style.background = isThermalMode ? '#FCFAF7' : '#ffffff'
+
+      offscreenContainer.appendChild(clone)
+      document.body.appendChild(offscreenContainer)
+
+      // Allow browser to perform layout reflow for the clone
+      await new Promise((r) => setTimeout(r, 150))
+
+      const measuredHeight = Math.max(clone.scrollHeight, clone.offsetHeight)
+
+      const dataUrl = await toPng(clone, {
         quality: 0.98,
         pixelRatio: 2, // High resolution for crystal clear mobile sharing
         backgroundColor: '#ffffff',
-        width: exportWidth,
-        height: exportHeight,
+        width: targetWidth,
+        height: measuredHeight,
         style: {
           margin: '0',
           left: '0',
           top: '0',
           transform: 'none',
           position: 'static',
-          width: `${exportWidth}px`,
+          width: `${targetWidth}px`,
+          minWidth: `${targetWidth}px`,
+          maxWidth: `${targetWidth}px`,
           boxSizing: 'border-box',
           overflow: 'visible',
         },
@@ -103,6 +141,9 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
       console.error('Failed to export image:', err)
       alert('Gagal membuat gambar. Silakan gunakan tombol Cetak.')
     } finally {
+      if (offscreenContainer && offscreenContainer.parentNode) {
+        offscreenContainer.parentNode.removeChild(offscreenContainer)
+      }
       setIsExportingImage(false)
     }
   }
@@ -170,9 +211,99 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div
+      id="print-modal-backdrop"
+      className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto print:static print:inset-auto print:p-0 print:m-0 print:bg-transparent print:overflow-visible print:block print:z-auto"
+    >
+      {/* Dynamic Print CSS for True A4 & Thermal Paper Standards */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            @media print {
+              @page {
+                size: ${printMode === 'thermal' ? '80mm auto' : 'A4 portrait'};
+                margin: ${printMode === 'thermal' ? '2mm 3mm' : '8mm 10mm'};
+              }
+              html, body {
+                background: #ffffff !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                height: auto !important;
+                overflow: visible !important;
+              }
+              /* Hide all elements on page except print modal backdrop */
+              body > *:not(#print-modal-backdrop) {
+                display: none !important;
+              }
+              #print-modal-backdrop {
+                position: static !important;
+                inset: auto !important;
+                background: transparent !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                overflow: visible !important;
+                max-height: none !important;
+                height: auto !important;
+                display: block !important;
+                width: 100% !important;
+              }
+              #print-modal-card {
+                position: static !important;
+                border: none !important;
+                box-shadow: none !important;
+                border-radius: 0 !important;
+                max-height: none !important;
+                height: auto !important;
+                overflow: visible !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                max-width: none !important;
+                width: 100% !important;
+                display: block !important;
+                background: #ffffff !important;
+              }
+              #print-modal-content {
+                padding: 0 !important;
+                margin: 0 !important;
+                overflow: visible !important;
+                height: auto !important;
+                max-height: none !important;
+                display: block !important;
+              }
+              ${
+                printMode === 'thermal'
+                  ? `
+                #print-target-thermal {
+                  width: 76mm !important;
+                  max-width: 80mm !important;
+                  margin: 0 auto !important;
+                  padding: 2mm !important;
+                  border: none !important;
+                  background: #ffffff !important;
+                  box-shadow: none !important;
+                }
+              `
+                  : `
+                #print-target-a4 {
+                  width: 100% !important;
+                  max-width: 210mm !important;
+                  margin: 0 auto !important;
+                  padding: 0 !important;
+                  border: none !important;
+                  box-shadow: none !important;
+                }
+              `
+              }
+            }
+          `,
+        }}
+      />
+
       {/* Container Card */}
-      <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-[#E8DFD5] overflow-hidden my-auto flex flex-col max-h-[94vh]">
+      <div
+        id="print-modal-card"
+        className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-[#E8DFD5] overflow-hidden my-auto flex flex-col max-h-[94vh] print:max-w-none print:max-h-none print:shadow-none print:border-none print:rounded-none print:overflow-visible print:m-0 print:block"
+      >
         {/* Modal Top Control Bar (Hidden when printing) */}
         <div className="print:hidden p-3.5 sm:p-4 border-b border-[#EAE4DC] bg-[#FAF8F5] flex flex-wrap items-center justify-between gap-2.5">
           {/* Mode Switcher Tabs */}
@@ -285,14 +416,15 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
         </div>
 
         {/* Printable & Exportable Area */}
-        <div className="p-4 sm:p-7 overflow-y-auto flex-1 bg-white">
+        <div id="print-modal-content" className="p-4 sm:p-7 overflow-y-auto flex-1 bg-white print:p-0 print:overflow-visible print:m-0 print:block">
           {/* ========================================================================= */}
           {/* MODE 1: INVOICE RESMI KONSUMEN (DENGAN STEMPEL LUNAS / DP / TEMPO)        */}
           {/* ========================================================================= */}
           {printMode === 'invoice' && (
             <div
               ref={invoiceContainerRef}
-              className="relative p-6 sm:p-8 bg-white border border-[#E8DFD5] rounded-3xl shadow-sm text-[#111613] space-y-6 print:border-none print:p-0 print:shadow-none"
+              id="print-target-a4"
+              className="relative p-6 sm:p-8 bg-white border border-[#E8DFD5] rounded-3xl shadow-sm text-[#111613] space-y-6 print:border-none print:p-0 print:shadow-none print:w-full print:max-w-none mx-auto max-w-3xl"
             >
               {/* Header Invoice */}
               <div className="flex items-start justify-between border-b-2 border-[#111613] pb-5">
@@ -431,8 +563,8 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
               </div>
 
               {/* Items Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs border border-gray-300 border-collapse">
+              <div className="overflow-x-auto -mx-1 px-1">
+                <table className="w-full text-xs border border-gray-300 border-collapse min-w-[500px]">
                   <thead>
                     <tr className="bg-[#FAF8F5] text-gray-800 font-bold border-b border-gray-300">
                       <th className="p-2.5 text-center w-10">No</th>
@@ -626,8 +758,9 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
             <div className="w-full flex justify-center py-2">
               <div
                 ref={invoiceContainerRef}
+                id="print-target-thermal"
                 style={{ margin: 0, width: 340, minWidth: 340, boxSizing: 'border-box' }}
-                className="font-mono text-xs text-[#111613] p-5 border border-dashed border-gray-400 rounded-2xl bg-[#FCFAF7] print:border-none print:p-0 print:w-full print:max-w-none shadow-sm"
+                className="font-mono text-xs text-[#111613] p-5 border border-dashed border-gray-400 rounded-2xl bg-[#FCFAF7] print:border-none print:p-2 print:w-[76mm] print:max-w-[80mm] print:mx-auto shadow-sm"
               >
                 <div className="text-center space-y-0.5 pb-3 border-b border-dashed border-gray-400">
                   <div className="font-bold text-base tracking-wider">HATOBA GROUP</div>
@@ -770,7 +903,8 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
           {printMode === 'surat_jalan' && (
             <div
               ref={invoiceContainerRef}
-              className="p-4 sm:p-6 border border-gray-300 rounded-2xl text-[#111613] space-y-5 print:border-none print:p-0 bg-white"
+              id="print-target-a4"
+              className="p-4 sm:p-6 border border-gray-300 rounded-2xl text-[#111613] space-y-5 print:border-none print:p-0 bg-white print:w-full print:max-w-none mx-auto max-w-3xl"
             >
               {/* Header Surat Jalan */}
               <div className="flex items-start justify-between border-b-2 border-[#111613] pb-4">
@@ -848,8 +982,8 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
               </div>
 
               {/* TABEL CHECKLIST BARANG (HANYA 1 CEK LIST: PENERIMAAN KONSUMEN) */}
-              <div>
-                <table className="w-full text-xs border border-gray-400 border-collapse print:border-black">
+              <div className="overflow-x-auto -mx-1 px-1">
+                <table className="w-full text-xs border border-gray-400 border-collapse print:border-black min-w-[560px]">
                   <thead>
                     <tr className="bg-gray-100 print:bg-gray-200 text-gray-900 font-bold border-b border-gray-400">
                       <th className="border border-gray-400 p-2 text-center w-8">No</th>
@@ -930,43 +1064,45 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
               </div>
 
               {/* 3 KOLOM TANDA TANGAN & SERAH TERIMA */}
-              <div className="pt-2 grid grid-cols-3 gap-4 text-center text-xs">
-                {/* 1. Petugas Gudang */}
-                <div className="p-2.5 border border-gray-300 rounded-xl print:border-black space-y-8 bg-gray-50/50 print:bg-white">
-                  <div className="text-[11px]">
-                    <span className="font-bold block text-gray-900">1. Disiapkan &amp; Dicek:</span>
-                    <span className="text-gray-500 print:text-black text-[10px]">(Petugas Gudang / QC)</span>
+              <div className="overflow-x-auto -mx-1 px-1">
+                <div className="pt-2 grid grid-cols-3 gap-4 text-center text-xs min-w-[520px]">
+                  {/* 1. Petugas Gudang */}
+                  <div className="p-2.5 border border-gray-300 rounded-xl print:border-black space-y-8 bg-gray-50/50 print:bg-white">
+                    <div className="text-[11px]">
+                      <span className="font-bold block text-gray-900">1. Disiapkan &amp; Dicek:</span>
+                      <span className="text-gray-500 print:text-black text-[10px]">(Petugas Gudang / QC)</span>
+                    </div>
+                    <div className="border-b border-gray-400 mx-2" />
+                    <div className="text-[10px] text-gray-600 print:text-black text-left px-1 -mt-6 space-y-1">
+                      <div>Nama: .......................................</div>
+                      <div>Tgl/Jam: ...................................</div>
+                    </div>
                   </div>
-                  <div className="border-b border-gray-400 mx-2" />
-                  <div className="text-[10px] text-gray-600 print:text-black text-left px-1 -mt-6 space-y-1">
-                    <div>Nama: .......................................</div>
-                    <div>Tgl/Jam: ...................................</div>
-                  </div>
-                </div>
 
-                {/* 2. Kurir / Driver Armada */}
-                <div className="p-2.5 border border-gray-300 rounded-xl print:border-black space-y-8 bg-gray-50/50 print:bg-white">
-                  <div className="text-[11px]">
-                    <span className="font-bold block text-gray-900">2. Dibawa &amp; Dikirim:</span>
-                    <span className="text-gray-500 print:text-black text-[10px]">(Kurir / Driver Armada)</span>
+                  {/* 2. Kurir / Driver Armada */}
+                  <div className="p-2.5 border border-gray-300 rounded-xl print:border-black space-y-8 bg-gray-50/50 print:bg-white">
+                    <div className="text-[11px]">
+                      <span className="font-bold block text-gray-900">2. Dibawa &amp; Dikirim:</span>
+                      <span className="text-gray-500 print:text-black text-[10px]">(Kurir / Driver Armada)</span>
+                    </div>
+                    <div className="border-b border-gray-400 mx-2" />
+                    <div className="text-[10px] text-gray-600 print:text-black text-left px-1 -mt-6 space-y-1">
+                      <div>Nama: .......................................</div>
+                      <div>No. Pol: ....................................</div>
+                    </div>
                   </div>
-                  <div className="border-b border-gray-400 mx-2" />
-                  <div className="text-[10px] text-gray-600 print:text-black text-left px-1 -mt-6 space-y-1">
-                    <div>Nama: .......................................</div>
-                    <div>No. Pol: ....................................</div>
-                  </div>
-                </div>
 
-                {/* 3. Konsumen / Restoran Penerima */}
-                <div className="p-2.5 border border-gray-300 rounded-xl print:border-black space-y-8 bg-emerald-50/40 print:bg-white">
-                  <div className="text-[11px]">
-                    <span className="font-bold block text-emerald-950 print:text-black">3. Diterima &amp; Diverifikasi:</span>
-                    <span className="text-gray-500 print:text-black text-[10px]">(Konsumen / PIC Dapur)</span>
-                  </div>
-                  <div className="border-b border-gray-400 mx-2" />
-                  <div className="text-[10px] text-gray-600 print:text-black text-left px-1 -mt-6 space-y-1">
-                    <div>Nama: .......................................</div>
-                    <div>Jam Terima: ............................</div>
+                  {/* 3. Konsumen / Restoran Penerima */}
+                  <div className="p-2.5 border border-gray-300 rounded-xl print:border-black space-y-8 bg-emerald-50/40 print:bg-white">
+                    <div className="text-[11px]">
+                      <span className="font-bold block text-emerald-950 print:text-black">3. Diterima &amp; Diverifikasi:</span>
+                      <span className="text-gray-500 print:text-black text-[10px]">(Konsumen / PIC Dapur)</span>
+                    </div>
+                    <div className="border-b border-gray-400 mx-2" />
+                    <div className="text-[10px] text-gray-600 print:text-black text-left px-1 -mt-6 space-y-1">
+                      <div>Nama: .......................................</div>
+                      <div>Jam Terima: ............................</div>
+                    </div>
                   </div>
                 </div>
               </div>
