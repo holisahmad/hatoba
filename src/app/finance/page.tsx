@@ -33,6 +33,13 @@ import {
   CheckCheck,
   Building2,
   AlertCircle,
+  Download,
+  Printer,
+  FileSpreadsheet,
+  FileCheck,
+  Eye,
+  Layers,
+  Share2,
 } from 'lucide-react'
 import {
   FinanceTransaction,
@@ -44,6 +51,7 @@ import {
   JournalEntry,
   CashierReconciliation,
 } from '@/lib/finance-store'
+import { AdminOrder } from '@/lib/admin-store'
 
 function formatIDR(amount: number): string {
   return new Intl.NumberFormat('id-ID', {
@@ -51,6 +59,18 @@ function formatIDR(amount: number): string {
     currency: 'IDR',
     maximumFractionDigits: 0,
   }).format(amount)
+}
+
+function downloadCSV(filename: string, content: string) {
+  const blob = new Blob(['\uFEFF' + content], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.setAttribute('href', url)
+  link.setAttribute('download', filename)
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
 }
 
 export default function FinanceERPPage() {
@@ -67,11 +87,13 @@ export default function FinanceERPPage() {
   const [config, setConfig] = useState<InitialCapitalConfig | null>(null)
   const [journal, setJournal] = useState<JournalEntry[]>([])
   const [reconciliations, setReconciliations] = useState<CashierReconciliation[]>([])
+  const [orders, setOrders] = useState<AdminOrder[]>([])
   const [loading, setLoading] = useState(true)
 
   // Tab State
   type FinanceTab =
     | 'overview'
+    | 'reports'
     | 'reconciliation'
     | 'transactions'
     | 'cashflow'
@@ -109,6 +131,12 @@ export default function FinanceERPPage() {
   const [recResolution, setRecResolution] = useState<'SUDAH_COCOK' | 'BEBAN_PERUSAHAAN' | 'POTONG_KASIR' | 'PENDAPATAN_LAIN'>('SUDAH_COCOK')
   const [recNotes, setRecNotes] = useState<string>('')
   const [savingRec, setSavingRec] = useState(false)
+
+  // Export & Print State
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [showPrintPreview, setShowPrintPreview] = useState(false)
+  type ReportType = 'ALL' | 'PL' | 'BALANCE_SHEET' | 'CASH_FLOW' | 'SALES' | 'AR' | 'CASH_BANK' | 'RECON' | 'JOURNAL'
+  const [selectedReportType, setSelectedReportType] = useState<ReportType>('ALL')
 
   // Toast notification
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
@@ -184,6 +212,7 @@ export default function FinanceERPPage() {
         setInventory(data.inventory || null)
         setConfig(data.config || null)
         setJournal(data.journal || [])
+        setOrders(data.orders || [])
 
         // If report has pos stats, auto-fill verification fields if empty
         if (data.report?.posReconciliationStats) {
@@ -384,6 +413,244 @@ export default function FinanceERPPage() {
     return verified - sys
   }, [report, recBankVerified])
 
+  // ======================= EXCEL / CSV EXPORTERS =======================
+  const handleExportSalesCSV = () => {
+    const rows = [
+      ['No. Referensi', 'Tanggal', 'Nama Pelanggan', 'Nama Usaha/Resto', 'Area Hub', 'Kota', 'Marketing', 'Produk & Qty', 'Total Omzet (Rp)', 'Metode Bayar', 'Status Bayar', 'Status Order', 'Catatan'],
+      ...orders.map((ord) => [
+        `INV-${ord.referenceCode}`,
+        new Date(ord.createdAt).toLocaleDateString('id-ID'),
+        ord.customerName,
+        ord.businessName || '-',
+        ord.hubArea,
+        ord.city,
+        ord.marketingName || 'Organik Web/POS',
+        ord.items.map((i) => `${i.productName} (${i.quantity}x)`).join('; '),
+        ord.totalAmount,
+        ord.paymentMethod || 'TUNAI',
+        ord.paymentStatus || 'LUNAS',
+        ord.status,
+        (ord.notes || '').replace(/"/g, '""'),
+      ]),
+    ]
+    const csv = rows.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n')
+    downloadCSV(`HATOBA_Laporan_Penjualan_${new Date().toISOString().slice(0, 10)}.csv`, csv)
+    showToast('Laporan Penjualan berhasil diunduh ke Excel (.csv)!')
+  }
+
+  const handleExportPLCSV = () => {
+    if (!report) return
+    const rows = [
+      ['HATOBA COLD CHAIN BOGA MANDIRI - LAPORAN LABA RUGI SAK EMKM'],
+      [`Periode: ${new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}`, `Tanggal Unduh: ${new Date().toLocaleDateString('id-ID')}`],
+      [''],
+      ['Komponen Laba Rugi', 'Kode Akun', 'Nominal (Rp)', 'Keterangan'],
+      ['PENDAPATAN PENJUALAN', '', '', ''],
+      ['  Penjualan Daging & Jeroan Beku (Pesanan Terverifikasi)', 'Akun 401', report.grossSalesFromOrders, ''],
+      ['  Penjualan Kasir Langsung (POS Cash Sales)', 'Akun 401', report.cashSalesDirect, ''],
+      ['TOTAL PENDAPATAN OPERASIONAL', 'Akun 401', report.totalSalesRevenue, '100%'],
+      [''],
+      ['BEBAN POKOK PENJUALAN (HPP)', '', '', ''],
+      ['  Pembelian Daging & Jeroan Sapi RPH', 'Akun 501', report.totalMeatPurchases, ''],
+      ['  Ongkir Kargo Beku / Ekspedisi Pendingin Masuk', 'Akun 502', report.totalFreightIn, ''],
+      ['  Nilai Persediaan Akhir Freezer (-18°C)', 'Akun 104', -report.inventoryValue, 'Pengurang HPP'],
+      ['TOTAL BEBAN POKOK PENJUALAN (HPP)', 'Akun 500', report.estimatedHPP, `${((report.estimatedHPP / (report.totalSalesRevenue || 1)) * 100).toFixed(1)}%`],
+      [''],
+      ['LABA KOTOR (GROSS PROFIT)', '', report.grossProfitMarginRp, `${report.grossProfitMarginPercent.toFixed(1)}% dari Omzet`],
+      [''],
+      ['BEBAN OPERASIONAL USAHA', '', '', ''],
+      ['  Total Beban Operasional (PLN Freezer, Gaji, BBM, dll)', 'Akun 600', report.totalOperatingExpenses, ''],
+      [''],
+      ['LABA BERSIH OPERASIONAL (NET INCOME)', 'Akun 303', report.netOperatingIncome, 'Sebelum Pajak UMKM (PP 55/2022)'],
+    ]
+    const csv = rows.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n')
+    downloadCSV(`HATOBA_Laba_Rugi_EMKM_${new Date().toISOString().slice(0, 10)}.csv`, csv)
+    showToast('Laporan Laba Rugi SAK EMKM berhasil diunduh ke Excel (.csv)!')
+  }
+
+  const handleExportBalanceSheetCSV = () => {
+    if (!report) return
+    const rows = [
+      ['HATOBA COLD CHAIN BOGA MANDIRI - LAPORAN POSISI KEUANGAN (NERACA SEDERHANA)'],
+      [`Standar: SAK EMKM`, `Per Tanggal: ${new Date().toLocaleDateString('id-ID')}`],
+      [''],
+      ['Klasifikasi Neraca', 'Kode Akun', 'Nama Akun', 'Nominal (Rp)'],
+      ['ASET LANCAR', '', '', ''],
+      ['  Aset Lancar', '101', 'Kas Fisik di Tangan', report.realCash],
+      ['  Aset Lancar', '102', 'Bank Mandiri Operasional', report.realBank],
+      ['  Aset Lancar', '103', 'Piutang Usaha Konsumen', report.totalReceivables],
+      ['  Aset Lancar', '104', 'Persediaan Daging & Jeroan Beku (-18°C)', report.inventoryValue],
+      ['TOTAL ASET LANCAR', '', '', report.realCash + report.realBank + report.totalReceivables + report.inventoryValue],
+      [''],
+      ['ASET TETAP', '', '', ''],
+      ['  Aset Tetap', '120', 'Chest Freezer & Peralatan Pendingin Cold Chain', report.balanceSheet.assets.coldChainFixedAssets],
+      ['TOTAL ASET TETAP', '', '', report.balanceSheet.assets.coldChainFixedAssets],
+      [''],
+      ['TOTAL ASET (HARTA USAHA)', '', '', report.balanceSheet.assets.totalAssets],
+      [''],
+      ['KEWAJIBAN (LIABILITAS JANGKA PENDEK)', '', '', ''],
+      ['  Hutang Usaha', '201', 'Hutang Dagang Supplier Daging RPH', report.balanceSheet.liabilitiesAndEquity.accountsPayable],
+      ['TOTAL KEWAJIBAN', '', '', report.balanceSheet.liabilitiesAndEquity.accountsPayable],
+      [''],
+      ['EKUITAS (MODAL PEMILIK)', '', '', ''],
+      ['  Modal', '301', 'Modal Disetor Pemilik (Doni Kristiawan)', report.capitalInjection],
+      ['  Prive', '302', 'Pengambilan Prive Pemilik', -report.ownerDraws],
+      ['  Laba', '303', 'Saldo Laba Berjalan', report.netOperatingIncome],
+      ['TOTAL EKUITAS PEMILIK', '', '', report.balanceSheet.liabilitiesAndEquity.endingEquity],
+      [''],
+      ['TOTAL LIABILITAS & EKUITAS', '', '', report.balanceSheet.liabilitiesAndEquity.totalLiabilitiesAndEquity],
+      ['STATUS KESEIMBANGAN', '', '', report.balanceSheet.isBalanced ? 'BALANCE (KLOP)' : 'SELISIH'],
+    ]
+    const csv = rows.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n')
+    downloadCSV(`HATOBA_Neraca_Sederhana_${new Date().toISOString().slice(0, 10)}.csv`, csv)
+    showToast('Laporan Neraca Sederhana berhasil diunduh ke Excel (.csv)!')
+  }
+
+  const handleExportCashFlowCSV = () => {
+    if (!report) return
+    const rows = [
+      ['HATOBA COLD CHAIN BOGA MANDIRI - LAPORAN ARUS KAS (METODE LANGSUNG)'],
+      [`Standar: SAK EMKM`, `Periode: ${new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}`],
+      [''],
+      ['Aktivitas Arus Kas', 'Rincian Transaksi', 'Arus Kas Masuk (Rp)', 'Arus Kas Keluar (Rp)', 'Arus Kas Bersih (Rp)'],
+      ['AKTIVITAS OPERASI', 'Penerimaan Kas dari Konsumen & Pelunasan Piutang', report.totalSalesRevenue, 0, ''],
+      ['AKTIVITAS OPERASI', 'Pembayaran Kas untuk Pembelian Daging RPH', 0, report.totalMeatPurchases, ''],
+      ['AKTIVITAS OPERASI', 'Pembayaran Kas Beban Operasional (PLN, Gaji, dll)', 0, report.totalOperatingExpenses, ''],
+      ['TOTAL ARUS KAS DARI AKTIVITAS OPERASI', '', '', '', report.operatingCashFlow],
+      [''],
+      ['AKTIVITAS INVESTASI', 'Pembelian Chest Freezer & Cooler Box', 0, Math.abs(report.investingCashFlow), ''],
+      ['TOTAL ARUS KAS DARI AKTIVITAS INVESTASI', '', '', '', report.investingCashFlow],
+      [''],
+      ['AKTIVITAS PENDANAAN', 'Setoran Modal Pemilik', report.capitalInjection, 0, ''],
+      ['AKTIVITAS PENDANAAN', 'Penarikan Dana Pribadi (Prive)', 0, report.ownerDraws, ''],
+      ['TOTAL ARUS KAS DARI AKTIVITAS PENDANAAN', '', '', '', report.financingCashFlow],
+      [''],
+      ['KENAIKAN / (PENURUNAN) KAS BERSIH', '', '', '', report.netCashChange],
+      ['SALDO KAS & BANK AKHIR', `Kas Fisik (${formatIDR(report.realCash)}) + Bank (${formatIDR(report.realBank)})`, '', '', report.totalLiquidCash],
+    ]
+    const csv = rows.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n')
+    downloadCSV(`HATOBA_Arus_Kas_EMKM_${new Date().toISOString().slice(0, 10)}.csv`, csv)
+    showToast('Laporan Arus Kas SAK EMKM berhasil diunduh ke Excel (.csv)!')
+  }
+
+  const handleExportTransactionsCSV = () => {
+    const rows = [
+      ['ID Transaksi', 'Tanggal', 'Akun', 'Tipe', 'Kategori Akuntansi', 'Nominal (Rp)', 'Pihak Terkait', 'No. Referensi', 'Catatan'],
+      ...transactions.map((tx) => [
+        tx.id,
+        tx.date,
+        tx.account === 'KAS' ? 'KAS FISIK (101)' : 'BANK MANDIRI (102)',
+        tx.type === 'IN' ? 'KAS MASUK' : 'KAS KELUAR',
+        CATEGORY_OPTIONS[tx.category]?.label || tx.category,
+        tx.amount,
+        tx.recipientOrPayer,
+        tx.referenceCode || '-',
+        (tx.notes || '').replace(/"/g, '""'),
+      ]),
+    ]
+    const csv = rows.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n')
+    downloadCSV(`HATOBA_Buku_Kas_dan_Bank_${new Date().toISOString().slice(0, 10)}.csv`, csv)
+    showToast('Buku Kas & Bank berhasil diunduh ke Excel (.csv)!')
+  }
+
+  const handleExportARCSV = () => {
+    if (!report) return
+    const rows = [
+      ['No. Invoice', 'Tanggal Pesanan', 'Nama Pelanggan', 'Nama Usaha/Resto', 'No. Telepon', 'Metode Bayar', 'Total Tagihan (Rp)', 'Sudah Dibayar (Rp)', 'Sisa Piutang (Rp)', 'Umur Piutang (Hari)', 'Status Umur'],
+      ...report.pendingTempoOrders.map((ord) => {
+        const remaining = Math.max(0, ord.totalAmount - (ord.paidAmount || 0))
+        const daysOld = Math.floor((new Date().getTime() - new Date(ord.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+        return [
+          `INV-${ord.referenceCode}`,
+          new Date(ord.createdAt).toLocaleDateString('id-ID'),
+          ord.customerName,
+          ord.businessName || '-',
+          ord.phone || '-',
+          ord.paymentMethod || 'TEMPO',
+          ord.totalAmount,
+          ord.paidAmount || 0,
+          remaining,
+          daysOld,
+          daysOld > 3 ? 'LEWAT JATUH TEMPO (>3 Hari)' : 'LANCAR (0-3 Hari)',
+        ]
+      }),
+    ]
+    const csv = rows.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n')
+    downloadCSV(`HATOBA_Buku_Piutang_AR_Aging_${new Date().toISOString().slice(0, 10)}.csv`, csv)
+    showToast('Buku Pembantu Piutang berhasil diunduh ke Excel (.csv)!')
+  }
+
+  const handleExportReconcileCSV = () => {
+    const rows = [
+      ['ID Rekonsiliasi', 'Tanggal', 'Label Shift', 'Kasir / Petugas', 'Kas Sistem (Rp)', 'Kas Fisik Dihitung (Rp)', 'Selisih Kas (Rp)', 'Transfer Sistem (Rp)', 'Bank Valid (Rp)', 'Selisih Transfer (Rp)', 'Status', 'Perlakuan Akuntansi', 'Catatan'],
+      ...reconciliations.map((rec) => [
+        rec.id,
+        rec.date,
+        rec.shiftLabel,
+        rec.reconciledBy,
+        rec.systemCashTotal,
+        rec.actualCashCounted,
+        rec.cashDiscrepancy,
+        rec.systemTransferTotal,
+        rec.bankVerifiedTotal,
+        rec.transferDiscrepancy,
+        rec.status,
+        rec.resolutionAction || 'SUDAH_COCOK',
+        (rec.notes || '').replace(/"/g, '""'),
+      ]),
+    ]
+    const csv = rows.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n')
+    downloadCSV(`HATOBA_Rekonsiliasi_Kasir_POS_${new Date().toISOString().slice(0, 10)}.csv`, csv)
+    showToast('Log Rekonsiliasi Kasir berhasil diunduh ke Excel (.csv)!')
+  }
+
+  const handleExportJournalCSV = () => {
+    const rows: (string | number)[][] = [
+      ['ID Jurnal', 'Tanggal', 'No. Referensi', 'Keterangan Jurnal', 'Kode Akun', 'Nama Akun', 'Debit (Rp)', 'Kredit (Rp)'],
+    ]
+    journal.forEach((entry) => {
+      entry.lines.forEach((line) => {
+        rows.push([
+          entry.id,
+          entry.date,
+          entry.referenceNo,
+          entry.description.replace(/"/g, '""'),
+          line.accountCode,
+          line.accountName,
+          line.debit,
+          line.credit,
+        ])
+      })
+    })
+    const csv = rows.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n')
+    downloadCSV(`HATOBA_Jurnal_Umum_${new Date().toISOString().slice(0, 10)}.csv`, csv)
+    showToast('Jurnal Umum berhasil diunduh ke Excel (.csv)!')
+  }
+
+  const handleExportMasterBundleCSV = () => {
+    if (!report) return
+    let csv = `"HATOBA COLD CHAIN BOGA MANDIRI - BUNDEL LAPORAN KEUANGAN LENGKAP"\n"Standar: SAK EMKM Indonesia","Tanggal Unduh: ${new Date().toLocaleDateString('id-ID')}"\n\n`
+    csv += `"1. RINGKASAN METRIK EKSEKUTIF"\n"Kas Likuid (Rp)","${report.totalLiquidCash}"\n"Total Piutang (Rp)","${report.totalReceivables}"\n"Persediaan Daging Freezer (Rp)","${report.inventoryValue}"\n"Hutang Supplier RPH (Rp)","${report.balanceSheet.liabilitiesAndEquity.accountsPayable}"\n"Margin Kotor Penjualan (Rp)","${report.grossProfitMarginRp}"\n"Laba Bersih Operasional (Rp)","${report.netOperatingIncome}"\n\n`
+    csv += `"2. BUKU KAS & BANK TERAKHIR"\n"Tanggal","Akun","Tipe","Kategori","Nominal (Rp)","Pihak Terkait"\n`
+    transactions.slice(0, 50).forEach((tx) => {
+      csv += `"${tx.date}","${tx.account}","${tx.type}","${CATEGORY_OPTIONS[tx.category]?.label || tx.category}","${tx.amount}","${tx.recipientOrPayer}"\n`
+    })
+    csv += `\n"3. BUKU PEMBANTU PIUTANG (AR AGING)"\n"Invoice","Pelanggan","Bisnis","Total Tagihan (Rp)","Sisa Piutang (Rp)","Umur (Hari)"\n`
+    report.pendingTempoOrders.forEach((ord) => {
+      const remaining = Math.max(0, ord.totalAmount - (ord.paidAmount || 0))
+      const daysOld = Math.floor((new Date().getTime() - new Date(ord.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+      csv += `"INV-${ord.referenceCode}","${ord.customerName}","${ord.businessName || '-'}","${ord.totalAmount}","${remaining}","${daysOld}"\n`
+    })
+    downloadCSV(`HATOBA_Master_Laporan_Keuangan_Lengkap_${new Date().toISOString().slice(0, 10)}.csv`, csv)
+    showToast('Bundel Master Laporan Lengkap berhasil diunduh!')
+  }
+
+  // Quick Open Print Preview
+  const triggerPrintPreview = (type: ReportType = 'ALL') => {
+    setSelectedReportType(type)
+    setShowPrintPreview(true)
+  }
+
   // ======================= VIEW: LOGIN SCREEN (SUB-SISTEM TERPISAH) =======================
   if (isAuthenticated === false) {
     return (
@@ -466,7 +733,7 @@ export default function FinanceERPPage() {
   return (
     <div className="min-h-screen bg-[#F7F4EE] text-[#111613] flex flex-col font-sans">
       {/* Top Standalone Header Bar */}
-      <header className="bg-[#111613] text-white border-b border-[#2A362F] sticky top-0 z-40 shadow-md">
+      <header className="bg-[#111613] text-white border-b border-[#2A362F] sticky top-0 z-40 shadow-md no-print">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#C59B47] to-[#8C6B24] flex items-center justify-center text-white shadow-sm flex-shrink-0">
@@ -491,6 +758,19 @@ export default function FinanceERPPage() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            {/* Quick Export & Print Button */}
+            <button
+              onClick={() => {
+                setSelectedReportType('ALL')
+                setShowExportModal(true)
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-[#233129] hover:bg-[#2F4237] text-white border border-[#C59B47]/60 text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+              title="Ekspor Laporan Keuangan ke Excel & Cetak PDF Resmi"
+            >
+              <Download className="w-3.5 h-3.5 text-[#C59B47]" />
+              <span>Ekspor / Cetak Laporan</span>
+            </button>
+
             <button
               onClick={() => {
                 setTxType('IN')
@@ -553,6 +833,18 @@ export default function FinanceERPPage() {
             >
               <PieChart className="w-3.5 h-3.5" />
               <span>Ringkasan &amp; Alert</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('reports')}
+              className={`px-3.5 py-1.5 rounded-lg font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                activeTab === 'reports'
+                  ? 'bg-[#C59B47] text-[#111613]'
+                  : 'text-gray-400 hover:text-white hover:bg-[#222E27]'
+              }`}
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Laporan &amp; Ekspor (PDF/Excel)</span>
             </button>
 
             <button
@@ -655,10 +947,43 @@ export default function FinanceERPPage() {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6 no-print">
         {/* ==================== TAB 1: OVERVIEW (RINGKASAN & ALERT MANAJEMEN) ==================== */}
         {activeTab === 'overview' && report && (
           <div className="space-y-6">
+            {/* Quick Export CTA Banner */}
+            <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-[#18211C] to-[#25332B] text-white border border-[#2D3A32] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#C59B47]/20 border border-[#C59B47]/40 flex items-center justify-center text-[#E5C278]">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-white">
+                    Pusat Laporan Lengkap Akuntansi HATOBA
+                  </h3>
+                  <p className="text-xs text-gray-300">
+                    Semua laporan (Penjualan, Laba Rugi, Neraca, Arus Kas, Piutang) siap diekspor ke Excel (.csv) &amp; Cetak/Simpan PDF (A4).
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setActiveTab('reports')}
+                  className="px-4 py-2 rounded-xl bg-[#C59B47] hover:bg-[#D4AA55] text-[#111613] font-bold text-xs transition-colors flex items-center gap-1.5 shadow-sm"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Lihat Semua Laporan</span>
+                </button>
+                <button
+                  onClick={handleExportMasterBundleCSV}
+                  className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition-colors flex items-center gap-1.5 border border-white/20"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Unduh Master Excel</span>
+                </button>
+              </div>
+            </div>
+
             {/* ACTIONABLE MANAGEMENT ALERT CARDS */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Alert 1: Overdue AR (Piutang Tempo Macet) */}
@@ -964,6 +1289,348 @@ export default function FinanceERPPage() {
                   <p className="text-gray-600 leading-relaxed text-[11px]">
                     Batasi tempo max 3 hari. Margin kotor 20% langsung dipecah: 60% restock daging, 20% operasional, 10% cadangan, 10% tabungan.
                   </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==================== TAB: PUSAT LAPORAN & EKSPOR (EXCEL & PDF) ==================== */}
+        {activeTab === 'reports' && report && (
+          <div className="space-y-6">
+            <div className="p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
+                <div>
+                  <h2 className="font-serif-title text-xl font-bold text-[#111613] flex items-center gap-2">
+                    <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                    <span>Pusat Laporan Lengkap &amp; Ekspor (Excel &amp; PDF Resmi)</span>
+                  </h2>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Semua laporan akuntansi SAK EMKM dan rekap penjualan dapat diunduh ke format Excel (.csv) atau dicetak resmi A4 (Simpan PDF).
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleExportMasterBundleCSV}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Unduh Master Excel Semua Laporan</span>
+                  </button>
+                  <button
+                    onClick={() => triggerPrintPreview('ALL')}
+                    className="px-4 py-2 rounded-xl bg-[#111613] hover:bg-[#222E27] text-white font-bold text-xs transition-colors flex items-center gap-1.5 shadow-sm border border-[#C59B47]/40"
+                  >
+                    <Printer className="w-4 h-4 text-[#C59B47]" />
+                    <span>Cetak PDF Resmi A4</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Grid of Report Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 pt-2">
+                {/* 1. Laporan Penjualan & POS */}
+                <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] flex flex-col justify-between space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm text-[#111613] flex items-center gap-2">
+                        <Receipt className="w-4 h-4 text-emerald-600" />
+                        <span>Laporan Rekap Penjualan POS</span>
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                        {orders.length} Transaksi
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 leading-relaxed">
+                      Rincian pesanan dari Web &amp; POS kasir, performa tim marketing, metode bayar (Tunai/Transfer/Tempo), dan status lunas.
+                    </p>
+                    <div className="font-mono font-bold text-base text-[#111613]">
+                      Omzet: {formatIDR(report.totalSalesRevenue)}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 pt-2 border-t border-gray-200 text-xs">
+                    <button
+                      onClick={handleExportSalesCSV}
+                      className="flex-1 py-2 px-3 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 font-bold text-[#111613] flex items-center justify-center gap-1 transition-colors shadow-xs"
+                    >
+                      <Download className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Excel (.csv)</span>
+                    </button>
+                    <button
+                      onClick={() => triggerPrintPreview('SALES')}
+                      className="py-2 px-3 rounded-xl bg-[#111613] hover:bg-[#222E27] text-white font-bold flex items-center justify-center gap-1 transition-colors"
+                      title="Cetak A4 / Simpan PDF"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-[#C59B47]" />
+                      <span>PDF</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Laporan Laba Rugi SAK EMKM */}
+                <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] flex flex-col justify-between space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm text-[#111613] flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4 text-emerald-600" />
+                        <span>Laporan Laba Rugi (P&amp;L)</span>
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                        SAK EMKM
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 leading-relaxed">
+                      Laba kotor penjualan daging, beban HPP, rincian biaya listrik cold storage -18°C, gaji, dan laba operasional bersih.
+                    </p>
+                    <div className="font-mono font-bold text-base text-emerald-700">
+                      Laba Bersih: {formatIDR(report.netOperatingIncome)}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 pt-2 border-t border-gray-200 text-xs">
+                    <button
+                      onClick={handleExportPLCSV}
+                      className="flex-1 py-2 px-3 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 font-bold text-[#111613] flex items-center justify-center gap-1 transition-colors shadow-xs"
+                    >
+                      <Download className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Excel (.csv)</span>
+                    </button>
+                    <button
+                      onClick={() => triggerPrintPreview('PL')}
+                      className="py-2 px-3 rounded-xl bg-[#111613] hover:bg-[#222E27] text-white font-bold flex items-center justify-center gap-1 transition-colors"
+                      title="Cetak A4 / Simpan PDF"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-[#C59B47]" />
+                      <span>PDF</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3. Laporan Posisi Keuangan (Neraca) */}
+                <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] flex flex-col justify-between space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm text-[#111613] flex items-center gap-2">
+                        <Scale className="w-4 h-4 text-[#C59B47]" />
+                        <span>Laporan Neraca Sederhana</span>
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                        Balance
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 leading-relaxed">
+                      Aset lancar (Kas, Bank, Piutang, Daging Beku), Aset Tetap Freezer, Hutang Supplier, dan Ekuitas Modal Pemilik.
+                    </p>
+                    <div className="font-mono font-bold text-base text-[#111613]">
+                      Total Aset: {formatIDR(report.balanceSheet.assets.totalAssets)}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 pt-2 border-t border-gray-200 text-xs">
+                    <button
+                      onClick={handleExportBalanceSheetCSV}
+                      className="flex-1 py-2 px-3 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 font-bold text-[#111613] flex items-center justify-center gap-1 transition-colors shadow-xs"
+                    >
+                      <Download className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Excel (.csv)</span>
+                    </button>
+                    <button
+                      onClick={() => triggerPrintPreview('BALANCE_SHEET')}
+                      className="py-2 px-3 rounded-xl bg-[#111613] hover:bg-[#222E27] text-white font-bold flex items-center justify-center gap-1 transition-colors"
+                      title="Cetak A4 / Simpan PDF"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-[#C59B47]" />
+                      <span>PDF</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 4. Laporan Arus Kas (Cash Flow) */}
+                <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] flex flex-col justify-between space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm text-[#111613] flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4 text-emerald-600" />
+                        <span>Laporan Arus Kas</span>
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
+                        Metode Langsung
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 leading-relaxed">
+                      Pergerakan arus kas riil dari 3 pilar: Aktivitas Operasi harian, Aktivitas Investasi mesin, dan Aktivitas Pendanaan.
+                    </p>
+                    <div className="font-mono font-bold text-base text-emerald-700">
+                      Kas Bersih: {formatIDR(report.totalLiquidCash)}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 pt-2 border-t border-gray-200 text-xs">
+                    <button
+                      onClick={handleExportCashFlowCSV}
+                      className="flex-1 py-2 px-3 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 font-bold text-[#111613] flex items-center justify-center gap-1 transition-colors shadow-xs"
+                    >
+                      <Download className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Excel (.csv)</span>
+                    </button>
+                    <button
+                      onClick={() => triggerPrintPreview('CASH_FLOW')}
+                      className="py-2 px-3 rounded-xl bg-[#111613] hover:bg-[#222E27] text-white font-bold flex items-center justify-center gap-1 transition-colors"
+                      title="Cetak A4 / Simpan PDF"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-[#C59B47]" />
+                      <span>PDF</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 5. Buku Pembantu Piutang (AR Aging) */}
+                <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] flex flex-col justify-between space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm text-[#111613] flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-amber-600" />
+                        <span>Buku Piutang &amp; AR Aging</span>
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                        {report.pendingTempoOrders.length} Debitur
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 leading-relaxed">
+                      Daftar tagihan tempo per warung makan/resto, umur tagihan, status lancar (0-3 hari) vs macet (&gt;3 hari), kontak konsumen.
+                    </p>
+                    <div className="font-mono font-bold text-base text-amber-700">
+                      Total Piutang: {formatIDR(report.totalReceivables)}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 pt-2 border-t border-gray-200 text-xs">
+                    <button
+                      onClick={handleExportARCSV}
+                      className="flex-1 py-2 px-3 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 font-bold text-[#111613] flex items-center justify-center gap-1 transition-colors shadow-xs"
+                    >
+                      <Download className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Excel (.csv)</span>
+                    </button>
+                    <button
+                      onClick={() => triggerPrintPreview('AR')}
+                      className="py-2 px-3 rounded-xl bg-[#111613] hover:bg-[#222E27] text-white font-bold flex items-center justify-center gap-1 transition-colors"
+                      title="Cetak A4 / Simpan PDF"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-[#C59B47]" />
+                      <span>PDF</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 6. Buku Kas & Bank */}
+                <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] flex flex-col justify-between space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm text-[#111613] flex items-center gap-2">
+                        <Wallet className="w-4 h-4 text-blue-600" />
+                        <span>Buku Kas &amp; Mutasi Bank</span>
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                        {transactions.length} Mutasi
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 leading-relaxed">
+                      Rekap seluruh transaksi mutasi kas masuk dan keluar, rekening Kas Fisik (101) dan Bank Mandiri (102).
+                    </p>
+                    <div className="font-mono font-bold text-base text-[#111613]">
+                      Saldo: {formatIDR(report.totalLiquidCash)}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 pt-2 border-t border-gray-200 text-xs">
+                    <button
+                      onClick={handleExportTransactionsCSV}
+                      className="flex-1 py-2 px-3 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 font-bold text-[#111613] flex items-center justify-center gap-1 transition-colors shadow-xs"
+                    >
+                      <Download className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Excel (.csv)</span>
+                    </button>
+                    <button
+                      onClick={() => triggerPrintPreview('CASH_BANK')}
+                      className="py-2 px-3 rounded-xl bg-[#111613] hover:bg-[#222E27] text-white font-bold flex items-center justify-center gap-1 transition-colors"
+                      title="Cetak A4 / Simpan PDF"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-[#C59B47]" />
+                      <span>PDF</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 7. Rekonsiliasi Tutup Kasir POS */}
+                <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] flex flex-col justify-between space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm text-[#111613] flex items-center gap-2">
+                        <CheckCheck className="w-4 h-4 text-emerald-600" />
+                        <span>Rekonsiliasi Tutup Kasir</span>
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                        {reconciliations.length} Sesi
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 leading-relaxed">
+                      Berita acara pencocokan fisik uang laci kasir, mutasi bank rekening, dan pencatatan selisih kas (Akun 608/403).
+                    </p>
+                    <div className="font-mono font-bold text-base text-emerald-700">
+                      Sesi Terakhir: {reconciliations[0]?.status || 'BALANCED'}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 pt-2 border-t border-gray-200 text-xs">
+                    <button
+                      onClick={handleExportReconcileCSV}
+                      className="flex-1 py-2 px-3 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 font-bold text-[#111613] flex items-center justify-center gap-1 transition-colors shadow-xs"
+                    >
+                      <Download className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Excel (.csv)</span>
+                    </button>
+                    <button
+                      onClick={() => triggerPrintPreview('RECON')}
+                      className="py-2 px-3 rounded-xl bg-[#111613] hover:bg-[#222E27] text-white font-bold flex items-center justify-center gap-1 transition-colors"
+                      title="Cetak A4 / Simpan PDF"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-[#C59B47]" />
+                      <span>PDF</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 8. Jurnal Umum Otomatis */}
+                <div className="p-5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] flex flex-col justify-between space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm text-[#111613] flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-emerald-600" />
+                        <span>Jurnal Umum Otomatis</span>
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+                        Double-Entry
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 leading-relaxed">
+                      Buku jurnal umum standar akuntansi berisi posting debit dan kredit otomatis dari seluruh transaksi kas, bank, dan selisih.
+                    </p>
+                    <div className="font-mono font-bold text-base text-[#111613]">
+                      {journal.length} Entri Jurnal
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 pt-2 border-t border-gray-200 text-xs">
+                    <button
+                      onClick={handleExportJournalCSV}
+                      className="flex-1 py-2 px-3 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 font-bold text-[#111613] flex items-center justify-center gap-1 transition-colors shadow-xs"
+                    >
+                      <Download className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Excel (.csv)</span>
+                    </button>
+                    <button
+                      onClick={() => triggerPrintPreview('JOURNAL')}
+                      className="py-2 px-3 rounded-xl bg-[#111613] hover:bg-[#222E27] text-white font-bold flex items-center justify-center gap-1 transition-colors"
+                      title="Cetak A4 / Simpan PDF"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-[#C59B47]" />
+                      <span>PDF</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1313,17 +1980,26 @@ export default function FinanceERPPage() {
                     Seluruh arus kas masuk dan kas keluar tercatat real-time dan terhubung ke Jurnal Umum.
                   </p>
                 </div>
-                <button
-                  onClick={() => {
-                    setTxType('IN')
-                    setTxCategory('INCOME_AR_COLLECTION')
-                    setShowAddTxModal(true)
-                  }}
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all shadow-sm flex items-center gap-1.5 self-start sm:self-auto"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>+ Catat Transaksi Baru</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleExportTransactionsCSV}
+                    className="px-3 py-1.5 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 font-bold text-xs text-[#111613] flex items-center gap-1.5 transition-colors shadow-xs"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Unduh Excel</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setTxType('IN')
+                      setTxCategory('INCOME_AR_COLLECTION')
+                      setShowAddTxModal(true)
+                    }}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all shadow-sm flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ Catat Transaksi</span>
+                  </button>
+                </div>
               </div>
 
               {/* Transactions Table */}
@@ -1417,9 +2093,22 @@ export default function FinanceERPPage() {
                     Klasifikasi arus kas berdasarkan 3 aktivitas utama standar SAK EMKM: Operasi, Investasi, &amp; Pendanaan.
                   </p>
                 </div>
-                <span className="text-xs font-mono font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-800">
-                  Metode Langsung
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleExportCashFlowCSV}
+                    className="px-3 py-1.5 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 font-bold text-xs text-[#111613] flex items-center gap-1.5 transition-colors shadow-xs"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Unduh Excel</span>
+                  </button>
+                  <button
+                    onClick={() => triggerPrintPreview('CASH_FLOW')}
+                    className="px-3 py-1.5 rounded-xl bg-[#111613] hover:bg-[#222E27] text-white font-bold text-xs transition-colors flex items-center gap-1.5"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-[#C59B47]" />
+                    <span>Cetak PDF</span>
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-6 text-xs">
@@ -1540,11 +2229,25 @@ export default function FinanceERPPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
+                    onClick={handleExportBalanceSheetCSV}
+                    className="px-3 py-1.5 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 font-bold text-xs text-[#111613] flex items-center gap-1.5 transition-colors shadow-xs"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Unduh Excel</span>
+                  </button>
+                  <button
+                    onClick={() => triggerPrintPreview('BALANCE_SHEET')}
+                    className="px-3 py-1.5 rounded-xl bg-[#111613] hover:bg-[#222E27] text-white font-bold text-xs transition-colors flex items-center gap-1.5"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-[#C59B47]" />
+                    <span>Cetak PDF</span>
+                  </button>
+                  <button
                     onClick={() => setShowInventoryModal(true)}
                     className="px-3.5 py-1.5 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] hover:bg-gray-100 text-xs font-bold text-[#111613] flex items-center gap-1.5"
                   >
                     <Snowflake className="w-3.5 h-3.5 text-cyan-600" />
-                    <span>Opname Nilai Stok</span>
+                    <span>Opname Stok</span>
                   </button>
                 </div>
               </div>
@@ -1702,6 +2405,13 @@ export default function FinanceERPPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleExportARCSV}
+                    className="px-3 py-1.5 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 font-bold text-xs text-[#111613] flex items-center gap-1.5 transition-colors shadow-xs"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Unduh Excel</span>
+                  </button>
                   <span className="text-xs font-mono font-bold px-3 py-1.5 rounded-xl bg-red-100 text-red-800 border border-red-300">
                     Macet: {formatIDR(report.receivablesOverdue)}
                   </span>
@@ -1810,9 +2520,22 @@ export default function FinanceERPPage() {
                     Setiap transaksi kas &amp; bank langsung terposting ke jurnal ganda (Debit = Kredit) standar akuntansi.
                   </p>
                 </div>
-                <span className="text-xs font-mono font-bold px-3 py-1 rounded-full bg-blue-100 text-blue-800">
-                  Double-Entry Automatic
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleExportJournalCSV}
+                    className="px-3 py-1.5 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 font-bold text-xs text-[#111613] flex items-center gap-1.5 transition-colors shadow-xs"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Unduh Excel</span>
+                  </button>
+                  <button
+                    onClick={() => triggerPrintPreview('JOURNAL')}
+                    className="px-3 py-1.5 rounded-xl bg-[#111613] hover:bg-[#222E27] text-white font-bold text-xs transition-colors flex items-center gap-1.5"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-[#C59B47]" />
+                    <span>Cetak PDF</span>
+                  </button>
+                </div>
               </div>
 
               {/* Journal Table */}
@@ -2000,9 +2723,386 @@ export default function FinanceERPPage() {
         )}
       </main>
 
+      {/* ======================= MODAL: MODAL EKSPOR LAPORAN ======================= */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs font-sans no-print">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-[#E3D9CC] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 bg-[#FAF8F5] border-b border-[#EAE4DC] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-bold text-sm text-[#111613]">
+                  Ekspor &amp; Cetak Laporan Keuangan
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowExportModal(false)}
+                className="p-1 rounded-lg hover:bg-gray-200 text-gray-500 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs">
+              <p className="text-gray-600">
+                Pilih format keluaran dan laporan yang ingin diunduh atau dicetak resmi:
+              </p>
+
+              <div className="space-y-2">
+                <button
+                  onClick={() => {
+                    handleExportMasterBundleCSV()
+                    setShowExportModal(false)
+                  }}
+                  className="w-full p-3.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-950 font-bold flex items-center justify-between transition-colors text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <FileSpreadsheet className="w-5 h-5 text-emerald-700" />
+                    <div>
+                      <div className="text-xs">Unduh Semua Laporan (Master Excel .csv)</div>
+                      <div className="text-[11px] text-emerald-700 font-normal">Bundel lengkap metrik, kas, piutang &amp; neraca</div>
+                    </div>
+                  </div>
+                  <Download className="w-4 h-4 text-emerald-700" />
+                </button>
+
+                <button
+                  onClick={() => {
+                    setShowExportModal(false)
+                    triggerPrintPreview('ALL')
+                  }}
+                  className="w-full p-3.5 rounded-2xl bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-900 font-bold flex items-center justify-between transition-colors text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <Printer className="w-5 h-5 text-[#C59B47]" />
+                    <div>
+                      <div className="text-xs">Cetak / Simpan PDF Dokumen Resmi A4</div>
+                      <div className="text-[11px] text-gray-500 font-normal">Format formal kop surat &amp; lembar tanda tangan direktur</div>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="pt-2 border-t border-gray-100">
+                <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2">
+                  Ekspor Laporan Spesifik (Excel):
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <button
+                    onClick={() => { handleExportSalesCSV(); setShowExportModal(false); }}
+                    className="p-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-left font-semibold text-gray-700 flex items-center gap-1.5"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Rekap Penjualan</span>
+                  </button>
+                  <button
+                    onClick={() => { handleExportPLCSV(); setShowExportModal(false); }}
+                    className="p-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-left font-semibold text-gray-700 flex items-center gap-1.5"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Laba Rugi EMKM</span>
+                  </button>
+                  <button
+                    onClick={() => { handleExportBalanceSheetCSV(); setShowExportModal(false); }}
+                    className="p-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-left font-semibold text-gray-700 flex items-center gap-1.5"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Neraca Sederhana</span>
+                  </button>
+                  <button
+                    onClick={() => { handleExportCashFlowCSV(); setShowExportModal(false); }}
+                    className="p-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-left font-semibold text-gray-700 flex items-center gap-1.5"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Arus Kas EMKM</span>
+                  </button>
+                  <button
+                    onClick={() => { handleExportARCSV(); setShowExportModal(false); }}
+                    className="p-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-left font-semibold text-gray-700 flex items-center gap-1.5"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Buku Piutang</span>
+                  </button>
+                  <button
+                    onClick={() => { handleExportJournalCSV(); setShowExportModal(false); }}
+                    className="p-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-left font-semibold text-gray-700 flex items-center gap-1.5"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Jurnal Umum</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================= MODAL: PRINTER & PDF PREVIEW A4 RESMI ======================= */}
+      {showPrintPreview && report && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-black/75 backdrop-blur-xs font-sans overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-4xl w-full shadow-2xl border border-gray-300 overflow-hidden my-auto">
+            {/* Top Preview Action Bar (No-Print) */}
+            <div className="px-6 py-4 bg-[#111613] text-white flex flex-wrap items-center justify-between gap-3 no-print">
+              <div className="flex items-center gap-2">
+                <Printer className="w-5 h-5 text-[#C59B47]" />
+                <span className="font-bold text-sm">
+                  Pratinjau Dokumen Cetak / Simpan PDF (A4)
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-colors"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Cetak / Simpan PDF (A4)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPrintPreview(false)}
+                  className="px-3 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white font-semibold text-xs transition-colors"
+                >
+                  ✕ Tutup
+                </button>
+              </div>
+            </div>
+
+            {/* A4 PRINTABLE DOCUMENT BODY */}
+            <div id="printable-report" className="p-8 sm:p-12 bg-white text-black space-y-6 text-xs leading-relaxed">
+              {/* Formal Letterhead (Kop Surat) */}
+              <div className="border-b-2 border-black pb-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="text-center sm:text-left space-y-1">
+                  <div className="font-serif-title font-bold text-xl tracking-tight text-black">
+                    HATOBA COLD CHAIN BOGA MANDIRI
+                  </div>
+                  <div className="text-[11px] font-semibold text-gray-700">
+                    Spesialis Daging Sapi &amp; Jeroan Beku Higienis (-18°C) • Cold Chain Food Service
+                  </div>
+                  <div className="text-[10px] text-gray-600">
+                    Hub Denpasar: Jl. Teuku Umar Barat, Denpasar Barat • Hub Yogyakarta: Sleman DIY • WA: 0812-3456-7890
+                  </div>
+                  <div className="text-[10px] text-gray-500 font-mono">
+                    Standar Pelaporan: SAK EMKM Indonesia • Klasifikasi Usaha: Cold Chain Trading
+                  </div>
+                </div>
+                <div className="text-center sm:text-right border-t sm:border-t-0 sm:border-l border-gray-300 pt-2 sm:pt-0 sm:pl-4 space-y-0.5">
+                  <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Dokumen Resmi</div>
+                  <div className="font-mono font-bold text-xs">HTB-FIN/{new Date().getFullYear()}/{String(new Date().getMonth()+1).padStart(2, '0')}</div>
+                  <div className="text-[10px] text-gray-600">Tanggal: {new Date().toLocaleDateString('id-ID')}</div>
+                </div>
+              </div>
+
+              {/* Title of Document */}
+              <div className="text-center py-2">
+                <h1 className="font-bold text-base uppercase tracking-wide">
+                  {selectedReportType === 'ALL' && 'LAPORAN KEUANGAN LENGKAP & REKAPITULASI (SAK EMKM)'}
+                  {selectedReportType === 'PL' && 'LAPORAN LABA RUGI OPERASIONAL (SAK EMKM)'}
+                  {selectedReportType === 'BALANCE_SHEET' && 'LAPORAN POSISI KEUANGAN / NERACA SEDERHANA'}
+                  {selectedReportType === 'CASH_FLOW' && 'LAPORAN ARUS KAS (METODE LANGSUNG)'}
+                  {selectedReportType === 'SALES' && 'LAPORAN REKAPITULASI PENJUALAN POS & KASIR'}
+                  {selectedReportType === 'AR' && 'BUKU PEMBANTU PIUTANG & ANALISIS UMUR (AR AGING)'}
+                  {selectedReportType === 'CASH_BANK' && 'BUKU KAS & MUTASI REKENING BANK'}
+                  {selectedReportType === 'RECON' && 'BERITA ACARA REKONSILIASI TUTUP KASIR POS'}
+                  {selectedReportType === 'JOURNAL' && 'BUKU JURNAL UMUM DOUBLE-ENTRY'}
+                </h1>
+                <p className="text-[11px] text-gray-600">
+                  Periode Berjalan: {new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
+                </p>
+              </div>
+
+              {/* SECTION: LABA RUGI (Visible in ALL or PL) */}
+              {(selectedReportType === 'ALL' || selectedReportType === 'PL') && (
+                <div className="space-y-2 page-break-avoid">
+                  <div className="font-bold text-xs uppercase bg-gray-100 p-1.5 border border-black">
+                    I. Laporan Laba Rugi Operasional (Income Statement)
+                  </div>
+                  <table className="w-full text-xs border border-black border-collapse">
+                    <tbody>
+                      <tr className="border-b border-gray-300">
+                        <td className="p-2 font-bold" colSpan={2}>PENDAPATAN USAHA (PENJUALAN DAGING)</td>
+                        <td className="p-2 text-right font-mono font-bold">{formatIDR(report.totalSalesRevenue)}</td>
+                      </tr>
+                      <tr className="border-b border-gray-300 text-gray-700">
+                        <td className="p-2 pl-6">Estimasi Beban Pokok Penjualan (HPP Daging Beku &amp; Kargo Pendingin)</td>
+                        <td className="p-2 font-mono text-center">Akun 500</td>
+                        <td className="p-2 text-right font-mono">- {formatIDR(report.estimatedHPP)}</td>
+                      </tr>
+                      <tr className="border-b-2 border-black bg-gray-50 font-bold">
+                        <td className="p-2">LABA KOTOR (GROSS PROFIT MARGIN)</td>
+                        <td className="p-2 font-mono text-center">{report.grossProfitMarginPercent.toFixed(1)}%</td>
+                        <td className="p-2 text-right font-mono">{formatIDR(report.grossProfitMarginRp)}</td>
+                      </tr>
+                      <tr className="border-b border-gray-300 text-gray-700">
+                        <td className="p-2 pl-6">Total Beban Operasional (PLN Freezer, Gaji, Kemasan Vacuum, BBM)</td>
+                        <td className="p-2 font-mono text-center">Akun 600</td>
+                        <td className="p-2 text-right font-mono">- {formatIDR(report.totalOperatingExpenses)}</td>
+                      </tr>
+                      <tr className="bg-gray-100 font-bold border-t-2 border-black">
+                        <td className="p-2" colSpan={2}>LABA BERSIH OPERASIONAL (NET INCOME)</td>
+                        <td className="p-2 text-right font-mono text-sm">{formatIDR(report.netOperatingIncome)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* SECTION: NERACA (Visible in ALL or BALANCE_SHEET) */}
+              {(selectedReportType === 'ALL' || selectedReportType === 'BALANCE_SHEET') && (
+                <div className="space-y-2 page-break-avoid">
+                  <div className="font-bold text-xs uppercase bg-gray-100 p-1.5 border border-black">
+                    II. Laporan Posisi Keuangan / Neraca Sederhana
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <table className="w-full text-xs border border-black border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-black">
+                          <th className="p-2 text-left" colSpan={2}>ASET (HARTA)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-b border-gray-200">
+                          <td className="p-2">Kas Fisik di Tangan (101)</td>
+                          <td className="p-2 text-right font-mono">{formatIDR(report.realCash)}</td>
+                        </tr>
+                        <tr className="border-b border-gray-200">
+                          <td className="p-2">Bank Mandiri (102)</td>
+                          <td className="p-2 text-right font-mono">{formatIDR(report.realBank)}</td>
+                        </tr>
+                        <tr className="border-b border-gray-200">
+                          <td className="p-2">Piutang Usaha Konsumen (103)</td>
+                          <td className="p-2 text-right font-mono">{formatIDR(report.totalReceivables)}</td>
+                        </tr>
+                        <tr className="border-b border-gray-200">
+                          <td className="p-2">Persediaan Daging Freezer (104)</td>
+                          <td className="p-2 text-right font-mono">{formatIDR(report.inventoryValue)}</td>
+                        </tr>
+                        <tr className="border-b border-gray-200">
+                          <td className="p-2">Aset Tetap Freezer -18°C (120)</td>
+                          <td className="p-2 text-right font-mono">{formatIDR(report.balanceSheet.assets.coldChainFixedAssets)}</td>
+                        </tr>
+                        <tr className="bg-gray-100 font-bold border-t-2 border-black">
+                          <td className="p-2">TOTAL ASET</td>
+                          <td className="p-2 text-right font-mono">{formatIDR(report.balanceSheet.assets.totalAssets)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+
+                    <table className="w-full text-xs border border-black border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-black">
+                          <th className="p-2 text-left" colSpan={2}>KEWAJIBAN &amp; EKUITAS</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-b border-gray-200">
+                          <td className="p-2">Hutang Supplier RPH (201)</td>
+                          <td className="p-2 text-right font-mono">{formatIDR(report.balanceSheet.liabilitiesAndEquity.accountsPayable)}</td>
+                        </tr>
+                        <tr className="border-b border-gray-200">
+                          <td className="p-2">Modal Disetor Pemilik (301)</td>
+                          <td className="p-2 text-right font-mono">{formatIDR(report.capitalInjection)}</td>
+                        </tr>
+                        <tr className="border-b border-gray-200">
+                          <td className="p-2">Prive Pemilik (302)</td>
+                          <td className="p-2 text-right font-mono">- {formatIDR(report.ownerDraws)}</td>
+                        </tr>
+                        <tr className="border-b border-gray-200">
+                          <td className="p-2">Saldo Laba Berjalan (303)</td>
+                          <td className="p-2 text-right font-mono">{formatIDR(report.netOperatingIncome)}</td>
+                        </tr>
+                        <tr className="border-b border-gray-200 font-semibold">
+                          <td className="p-2">Total Ekuitas Bersih</td>
+                          <td className="p-2 text-right font-mono">{formatIDR(report.balanceSheet.liabilitiesAndEquity.endingEquity)}</td>
+                        </tr>
+                        <tr className="bg-gray-100 font-bold border-t-2 border-black">
+                          <td className="p-2">TOTAL LIABILITAS &amp; EKUITAS</td>
+                          <td className="p-2 text-right font-mono">{formatIDR(report.balanceSheet.liabilitiesAndEquity.totalLiabilitiesAndEquity)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* SECTION: PIUTANG TEMPO (Visible in ALL or AR) */}
+              {(selectedReportType === 'ALL' || selectedReportType === 'AR') && (
+                <div className="space-y-2 page-break-avoid">
+                  <div className="font-bold text-xs uppercase bg-gray-100 p-1.5 border border-black flex justify-between">
+                    <span>III. Rekap Buku Pembantu Piutang (AR Aging Konsumen)</span>
+                    <span className="font-mono">Total Piutang: {formatIDR(report.totalReceivables)}</span>
+                  </div>
+                  <table className="w-full text-[11px] border border-black border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-black">
+                        <th className="p-1.5 text-left">No. Invoice</th>
+                        <th className="p-1.5 text-left">Nama Pelanggan &amp; Usaha</th>
+                        <th className="p-1.5 text-left">Metode</th>
+                        <th className="p-1.5 text-right">Total Tagihan</th>
+                        <th className="p-1.5 text-right">Sisa Piutang</th>
+                        <th className="p-1.5 text-center">Status Umur</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {report.pendingTempoOrders.map((ord) => {
+                        const remaining = Math.max(0, ord.totalAmount - (ord.paidAmount || 0))
+                        const daysOld = Math.floor((new Date().getTime() - new Date(ord.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+                        return (
+                          <tr key={ord.id} className="border-b border-gray-200">
+                            <td className="p-1.5 font-mono">INV-{ord.referenceCode}</td>
+                            <td className="p-1.5 font-semibold">{ord.customerName} {ord.businessName ? `(${ord.businessName})` : ''}</td>
+                            <td className="p-1.5">{ord.paymentMethod || 'TEMPO'}</td>
+                            <td className="p-1.5 text-right font-mono">{formatIDR(ord.totalAmount)}</td>
+                            <td className="p-1.5 text-right font-mono font-bold">{formatIDR(remaining)}</td>
+                            <td className="p-1.5 text-center">{daysOld > 3 ? `Macet (${daysOld} hr)` : `Lancar (${daysOld} hr)`}</td>
+                          </tr>
+                        )
+                      })}
+                      {report.pendingTempoOrders.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="p-3 text-center text-gray-500">Tidak ada piutang menggantung. Seluruh invoice lunas.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Formal Signature Box (Tanda Tangan Pengesahan) */}
+              <div className="pt-8 border-t border-gray-400 grid grid-cols-3 gap-6 text-center text-xs page-break-avoid">
+                <div className="space-y-16">
+                  <div className="font-semibold text-gray-700">Dibuat Oleh:</div>
+                  <div className="border-t border-black pt-1">
+                    <div className="font-bold">Tim Finance &amp; Kasir</div>
+                    <div className="text-[10px] text-gray-500">Staf Keuangan HATOBA</div>
+                  </div>
+                </div>
+
+                <div className="space-y-16">
+                  <div className="font-semibold text-gray-700">Diperiksa Oleh:</div>
+                  <div className="border-t border-black pt-1">
+                    <div className="font-bold">Finance Lead / Manager</div>
+                    <div className="text-[10px] text-gray-500">Supervisor Akuntansi</div>
+                  </div>
+                </div>
+
+                <div className="space-y-16">
+                  <div className="font-semibold text-gray-700">Disetujui Oleh:</div>
+                  <div className="border-t border-black pt-1">
+                    <div className="font-bold underline">Doni Kristiawan</div>
+                    <div className="text-[10px] text-gray-500">Direktur / Pemilik Usaha</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ======================= MODAL: TAMBAH TRANSAKSI KAS/BANK ======================= */}
       {showAddTxModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs font-sans">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs font-sans no-print">
           <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-[#E3D9CC] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             <div className="px-6 py-4 bg-[#FAF8F5] border-b border-[#EAE4DC] flex items-center justify-between">
               <div>
@@ -2167,7 +3267,7 @@ export default function FinanceERPPage() {
 
       {/* ======================= MODAL: STOCK OPNAME FREEZER (HPP) ======================= */}
       {showInventoryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs font-sans">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs font-sans no-print">
           <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-[#E3D9CC] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             <div className="px-6 py-4 bg-[#FAF8F5] border-b border-[#EAE4DC] flex items-center justify-between">
               <div>
@@ -2256,7 +3356,7 @@ export default function FinanceERPPage() {
       {/* Toast Notification */}
       {toast && (
         <div
-          className={`fixed bottom-6 right-6 z-[9999] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-xl text-sm font-semibold transition-all animate-in slide-in-from-bottom-4 ${
+          className={`fixed bottom-6 right-6 z-[9999] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-xl text-sm font-semibold transition-all animate-in slide-in-from-bottom-4 no-print ${
             toast.type === 'success' ? 'bg-[#1D6C48] text-white' : 'bg-red-700 text-white'
           }`}
         >

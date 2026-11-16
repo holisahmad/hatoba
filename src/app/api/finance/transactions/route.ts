@@ -10,6 +10,7 @@ import {
   getFinanceConfig,
   FinanceCategory,
 } from '@/lib/finance-store'
+import { getAdminOrders } from '@/lib/admin-store'
 
 async function checkFinanceAuth(): Promise<boolean> {
   const cookieStore = await cookies()
@@ -25,11 +26,12 @@ export async function GET() {
   }
 
   try {
-    const [transactions, report, inventory, config] = await Promise.all([
+    const [transactions, report, inventory, config, orders] = await Promise.all([
       getFinanceTransactions(),
       computeFinancialReport(),
       getInventorySnapshot(),
       getFinanceConfig(),
+      getAdminOrders(),
     ])
 
     const journal = generateGeneralJournal(transactions)
@@ -41,6 +43,7 @@ export async function GET() {
       inventory,
       config,
       journal,
+      orders,
     })
   } catch (err) {
     return NextResponse.json(
