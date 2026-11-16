@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import Image from 'next/image'
-import { Plus, Minus, ShoppingBag, Snowflake, Check, ShieldCheck } from 'lucide-react'
+import { Plus, Minus, ShoppingBag, Snowflake, ShieldCheck, ShoppingCart, Check } from 'lucide-react'
 import { ProductItem, ProductVariant, getEffectiveUnitPrice } from '@/lib/catalog-data'
 import { useCart } from '@/lib/cart-context'
 import { formatRupiah } from '@/lib/whatsapp'
@@ -12,11 +12,17 @@ interface ProductCardProps {
 }
 
 export default function ProductCard({ product }: ProductCardProps) {
-  const { addItem } = useCart()
+  const { addItem, updateQuantity, removeItem, items, setIsCartOpen } = useCart()
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant>(product.variants[0])
   const [quantity, setQuantity] = useState<number>(product.variants[0].minQty)
   const [showPackaging, setShowPackaging] = useState<boolean>(true)
-  const [addedToast, setAddedToast] = useState<boolean>(false)
+
+  // Check if this product+variant is already in cart
+  const cartItem = items.find(
+    (i) => i.productId === product.id && i.variantId === selectedVariant.id
+  )
+  const qtyInCart = cartItem?.quantity ?? 0
+  const isInCart = qtyInCart > 0
 
   const handleVariantChange = (variant: ProductVariant) => {
     setSelectedVariant(variant)
@@ -27,22 +33,38 @@ export default function ProductCard({ product }: ProductCardProps) {
 
   const handleAddToCart = () => {
     const effectivePrice = getEffectiveUnitPrice(selectedVariant, quantity)
-    addItem({
-      productId: product.id,
-      productName: product.name,
-      variantId: selectedVariant.id,
-      variantName: selectedVariant.name,
-      weight: selectedVariant.weight,
-      price: effectivePrice,
-      basePrice: selectedVariant.price,
-      packType: selectedVariant.packType,
-      quantity,
-      packagingImage: product.packagingImage,
-      minQty: selectedVariant.minQty,
-    })
+    addItem(
+      {
+        productId: product.id,
+        productName: product.name,
+        variantId: selectedVariant.id,
+        variantName: selectedVariant.name,
+        weight: selectedVariant.weight,
+        price: effectivePrice,
+        basePrice: selectedVariant.price,
+        packType: selectedVariant.packType,
+        quantity,
+        packagingImage: product.packagingImage,
+        minQty: selectedVariant.minQty,
+      },
+      false // jangan auto-buka drawer — user klik "Lihat Keranjang" di FloatingCartBar
+    )
+  }
 
-    setAddedToast(true)
-    setTimeout(() => setAddedToast(false), 2000)
+  const handleIncreaseCart = () => {
+    if (cartItem) {
+      updateQuantity(product.id, selectedVariant.id, qtyInCart + 1)
+    }
+  }
+
+  const handleDecreaseCart = () => {
+    if (cartItem) {
+      if (qtyInCart <= cartItem.minQty) {
+        removeItem(product.id, selectedVariant.id)
+      } else {
+        updateQuantity(product.id, selectedVariant.id, qtyInCart - 1)
+      }
+    }
   }
 
   return (
@@ -88,6 +110,14 @@ export default function ProductCard({ product }: ProductCardProps) {
               -18°C
             </span>
           </div>
+
+          {/* In-Cart Badge overlay */}
+          {isInCart && (
+            <div className="absolute top-3.5 right-3.5 z-10 bg-[#0D281E] text-white text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shadow-md">
+              <ShoppingCart className="w-3 h-3" />
+              {qtyInCart} pack
+            </div>
+          )}
 
           {/* Toggle Picture Button */}
           <div className="absolute bottom-3 right-3 flex items-center rounded-full bg-black/80 p-0.5 border border-white/20 backdrop-blur-md text-[10px] font-semibold text-white">
@@ -135,7 +165,7 @@ export default function ProductCard({ product }: ProductCardProps) {
           {/* Variant Selector Tabs */}
           <div className="mt-5 space-y-2">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 block">
-              Pilihan Kemasan & Porsi:
+              Pilihan Kemasan &amp; Porsi:
             </span>
             <div className="grid grid-cols-2 gap-2">
               {product.variants.map((v) => {
@@ -211,76 +241,120 @@ export default function ProductCard({ product }: ProductCardProps) {
 
       {/* Footer / Add to Cart CTA */}
       <div className="p-6 sm:p-7 pt-0 border-t border-gray-100 mt-2">
-        <div className="flex items-center justify-between pt-4 gap-3">
-          {/* Quantity Controls */}
-          <div className="flex items-center border border-gray-200 rounded-xl bg-gray-50 p-1">
-            <button
-              type="button"
-              suppressHydrationWarning
-              onClick={() => {
-                const next = quantity - 1
-                if (next >= selectedVariant.minQty) setQuantity(next)
-              }}
-              disabled={quantity <= selectedVariant.minQty}
-              className="p-2 hover:bg-white rounded-lg transition-colors disabled:opacity-30 text-gray-700"
-              aria-label="Kurangi Jumlah"
-            >
-              <Minus className="w-3.5 h-3.5" />
-            </button>
+        {isInCart ? (
+          /* ── State: Sudah ada di keranjang — tampilkan counter inline ── */
+          <div className="flex flex-col gap-2.5 pt-4">
+            {/* Counter Row */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center border border-[#C59B47] rounded-xl bg-[#FAF4E8] p-1 shadow-sm">
+                <button
+                  type="button"
+                  suppressHydrationWarning
+                  onClick={handleDecreaseCart}
+                  className="p-2 hover:bg-white rounded-lg transition-colors text-[#141615]"
+                  aria-label="Kurangi dari keranjang"
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                </button>
+                <span className="w-10 text-center text-sm font-bold font-mono text-[#141615]">
+                  {qtyInCart}
+                </span>
+                <button
+                  type="button"
+                  suppressHydrationWarning
+                  onClick={handleIncreaseCart}
+                  className="p-2 hover:bg-white rounded-lg transition-colors text-[#141615]"
+                  aria-label="Tambah di keranjang"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
 
-            <span className="w-8 text-center text-xs font-bold font-mono text-[#141615]">
-              {quantity}
-            </span>
-
-            <button
-              type="button"
-              suppressHydrationWarning
-              onClick={() => setQuantity(quantity + 1)}
-              className="p-2 hover:bg-white rounded-lg transition-colors text-gray-700"
-              aria-label="Tambah Jumlah"
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {/* Add to Cart Button */}
-          {(() => {
-            const effectiveUnitPrice = getEffectiveUnitPrice(selectedVariant, quantity)
-            const isDiscountActive = selectedVariant.packType === 'partai' && quantity >= 5
-
-            return (
+              {/* Tombol buka keranjang */}
               <button
                 type="button"
                 suppressHydrationWarning
-                onClick={handleAddToCart}
-                className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 transition-all shadow-md ${
-                  addedToast
-                    ? 'bg-[#0D281E] text-white'
-                    : 'bg-gold hover:bg-amber-400 text-obsidian-950 shadow-gold/20 hover:shadow-gold/40'
-                }`}
+                onClick={() => setIsCartOpen(true)}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 bg-[#0D281E] hover:bg-[#163520] text-white transition-all shadow-md"
               >
-                {addedToast ? (
-                  <div className="flex items-center gap-1.5">
-                    <Check className="w-4 h-4 text-emerald-accent" />
-                    <span>Masuk Keranjang!</span>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex items-center gap-1.5">
-                      <ShoppingBag className="w-4 h-4" />
-                      <span>+ Keranjang ({formatRupiah(effectiveUnitPrice * quantity)})</span>
-                    </div>
-                    {isDiscountActive && (
-                      <span className="text-[10px] bg-emerald-800 text-white px-2 py-0.5 rounded-full font-mono font-bold">
-                        Hemat Rp {(10000 * quantity).toLocaleString('id-ID')}
-                      </span>
-                    )}
-                  </>
-                )}
+                <Check className="w-4 h-4 text-emerald-400" />
+                <span>Di Keranjang — Lihat</span>
               </button>
-            )
-          })()}
-        </div>
+            </div>
+
+            {/* Tambah produk lagi */}
+            <button
+              type="button"
+              suppressHydrationWarning
+              onClick={handleAddToCart}
+              className="w-full py-2 px-4 rounded-xl font-semibold text-xs flex items-center justify-center gap-2 border border-[#C59B47] text-[#0D281E] hover:bg-[#FAF4E8] transition-all"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>
+                Tambah {quantity} pack lagi ({formatRupiah(getEffectiveUnitPrice(selectedVariant, qtyInCart + quantity) * quantity)})
+              </span>
+            </button>
+          </div>
+        ) : (
+          /* ── State: Belum di keranjang — tampilkan quantity picker + tombol tambah ── */
+          <div className="flex items-center justify-between pt-4 gap-3">
+            {/* Quantity Controls */}
+            <div className="flex items-center border border-gray-200 rounded-xl bg-gray-50 p-1">
+              <button
+                type="button"
+                suppressHydrationWarning
+                onClick={() => {
+                  const next = quantity - 1
+                  if (next >= selectedVariant.minQty) setQuantity(next)
+                }}
+                disabled={quantity <= selectedVariant.minQty}
+                className="p-2 hover:bg-white rounded-lg transition-colors disabled:opacity-30 text-gray-700"
+                aria-label="Kurangi Jumlah"
+              >
+                <Minus className="w-3.5 h-3.5" />
+              </button>
+
+              <span className="w-8 text-center text-xs font-bold font-mono text-[#141615]">
+                {quantity}
+              </span>
+
+              <button
+                type="button"
+                suppressHydrationWarning
+                onClick={() => setQuantity(quantity + 1)}
+                className="p-2 hover:bg-white rounded-lg transition-colors text-gray-700"
+                aria-label="Tambah Jumlah"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Add to Cart Button */}
+            {(() => {
+              const effectiveUnitPrice = getEffectiveUnitPrice(selectedVariant, quantity)
+              const isDiscountActive = selectedVariant.packType === 'partai' && quantity >= 5
+
+              return (
+                <button
+                  type="button"
+                  suppressHydrationWarning
+                  onClick={handleAddToCart}
+                  className="flex-1 py-3 px-4 rounded-xl font-bold text-xs flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 transition-all shadow-md bg-gold hover:bg-amber-400 text-obsidian-950 shadow-gold/20 hover:shadow-gold/40"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <ShoppingBag className="w-4 h-4" />
+                    <span>＋ Tambah ke Pesanan ({formatRupiah(effectiveUnitPrice * quantity)})</span>
+                  </div>
+                  {isDiscountActive && (
+                    <span className="text-[10px] bg-emerald-800 text-white px-2 py-0.5 rounded-full font-mono font-bold">
+                      Hemat Rp {(10000 * quantity).toLocaleString('id-ID')}
+                    </span>
+                  )}
+                </button>
+              )
+            })()}
+          </div>
+        )}
       </div>
     </div>
   )

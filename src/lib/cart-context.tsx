@@ -18,7 +18,8 @@ export interface CartItem {
 
 interface CartContextType {
   items: CartItem[]
-  addItem: (item: CartItem) => void
+  addItem: (item: CartItem, openDrawer?: boolean) => void
+  addMultipleItems: (newItems: CartItem[], openDrawer?: boolean) => void
   removeItem: (productId: string, variantId: string) => void
   updateQuantity: (productId: string, variantId: string, qty: number) => void
   clearCart: () => void
@@ -54,7 +55,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, [items])
 
-  const addItem = (newItem: CartItem) => {
+  const addItem = (newItem: CartItem, openDrawer = false) => {
     setItems((prev) => {
       const index = prev.findIndex(
         (i) => i.productId === newItem.productId && i.variantId === newItem.variantId
@@ -88,7 +89,46 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         },
       ]
     })
-    setIsCartOpen(true)
+    if (openDrawer) {
+      setIsCartOpen(true)
+    }
+  }
+
+  const addMultipleItems = (newItems: CartItem[], openDrawer = false) => {
+    if (!newItems || newItems.length === 0) return
+    setItems((prev) => {
+      const updated = [...prev]
+      for (const newItem of newItems) {
+        const index = updated.findIndex(
+          (i) => i.productId === newItem.productId && i.variantId === newItem.variantId
+        )
+        const basePrice = newItem.basePrice || newItem.price
+        const isPartai = newItem.packType === 'partai' || newItem.variantId.includes('partai')
+
+        if (index > -1) {
+          const curr = updated[index]
+          const newQty = curr.quantity + newItem.quantity
+          const effectivePrice = isPartai && newQty >= 5 ? Math.max(0, basePrice - 10000) : basePrice
+          updated[index] = {
+            ...curr,
+            quantity: newQty,
+            basePrice,
+            price: effectivePrice,
+          }
+        } else {
+          const effectivePrice = isPartai && newItem.quantity >= 5 ? Math.max(0, basePrice - 10000) : basePrice
+          updated.push({
+            ...newItem,
+            basePrice,
+            price: effectivePrice,
+          })
+        }
+      }
+      return updated
+    })
+    if (openDrawer) {
+      setIsCartOpen(true)
+    }
   }
 
   const removeItem = (productId: string, variantId: string) => {
@@ -135,6 +175,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       value={{
         items,
         addItem,
+        addMultipleItems,
         removeItem,
         updateQuantity,
         clearCart,

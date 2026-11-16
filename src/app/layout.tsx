@@ -4,6 +4,7 @@ import { CartProvider } from '@/lib/cart-context'
 import Header from '@/components/layout/Header'
 import Footer from '@/components/layout/Footer'
 import CartDrawer from '@/components/commerce/CartDrawer'
+import FloatingCartBar from '@/components/commerce/FloatingCartBar'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import {
   getOrganizationSchema,
@@ -102,6 +103,7 @@ export default function RootLayout({
           <Header />
           {children}
           <CartDrawer />
+          <FloatingCartBar />
           <Footer />
           <SpeedInsights />
         </CartProvider>
