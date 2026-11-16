@@ -991,7 +991,7 @@ export default function FinanceERPPage() {
 
       {/* ======================= LEFT SIDEBAR ADMIN PANEL (EXPAND / COLLAPSE) ======================= */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 bg-[#111613] text-white flex flex-col justify-between border-r border-[#2A362F] transition-all duration-300 ease-in-out no-print ${
+        className={`fixed inset-y-0 left-0 z-50 bg-[#111613] text-white flex flex-col justify-between border-r border-[#2A362F] transition-all duration-300 ease-in-out no-print overflow-y-auto ${
           mobileMenuOpen ? 'translate-x-0 w-72' : '-translate-x-full lg:translate-x-0'
         } ${sidebarExpanded ? 'lg:w-64' : 'lg:w-20'}`}
       >
@@ -1335,6 +1335,16 @@ export default function FinanceERPPage() {
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Catat Kas</span>
+              </button>
+
+              {/* Tombol Logout Sesi Keuangan */}
+              <button
+                onClick={handleLogout}
+                className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                title="Keluar dari Portal Keuangan (Logout)"
+              >
+                <LogOut className="w-3.5 h-3.5 text-red-600" />
+                <span className="hidden sm:inline">Keluar</span>
               </button>
             </div>
           </div>
