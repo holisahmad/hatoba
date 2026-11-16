@@ -45,6 +45,13 @@ import {
   X,
   Radio,
   Zap,
+  Play,
+  Pause,
+  Truck,
+  Box,
+  PackageCheck,
+  Thermometer,
+  PhoneCall,
 } from 'lucide-react'
 import {
   FinanceTransaction,
@@ -52,6 +59,8 @@ import {
   CATEGORY_OPTIONS,
   ComprehensiveFinancialReport,
   InventorySnapshot,
+  StockOpnameRecord,
+  GoodsReceiptRecord,
   InitialCapitalConfig,
   JournalEntry,
   CashierReconciliation,
@@ -114,6 +123,7 @@ export default function FinanceERPPage() {
     | 'equity'
     | 'ar_aging'
     | 'journal'
+    | 'goods_receipt'
     | 'help'
   const [activeTab, setActiveTab] = useState<FinanceTab>('overview')
 
@@ -133,8 +143,31 @@ export default function FinanceERPPage() {
   const [showInventoryModal, setShowInventoryModal] = useState(false)
   const [invWeightInput, setInvWeightInput] = useState<string>('185')
   const [invValueInput, setInvValueInput] = useState<string>('12950000')
+  const [invInspectorInput, setInvInspectorInput] = useState<string>('Finance Lead & Checker')
+  const [invTempInput, setInvTempInput] = useState<string>('-18.5')
   const [invNotesInput, setInvNotesInput] = useState<string>('Stok fisik daging & jeroan beku di freezer -18°C')
   const [savingInv, setSavingInv] = useState(false)
+
+  // Stock Opname History & Goods Receipt States
+  const [stockOpnameHistory, setStockOpnameHistory] = useState<StockOpnameRecord[]>([])
+  const [goodsReceipts, setGoodsReceipts] = useState<GoodsReceiptRecord[]>([])
+
+  // Goods Receipt Modal State
+  const [showGoodsReceiptModal, setShowGoodsReceiptModal] = useState<boolean>(false)
+  const [grDeliveryNote, setGrDeliveryNote] = useState<string>('')
+  const [grSource, setGrSource] = useState<'PUSAT_BALI' | 'SUPPLIER_RPH' | 'VENDOR_LAIN'>('PUSAT_BALI')
+  const [grSourceLabel, setGrSourceLabel] = useState<string>('Sentra Produksi Cold Storage HATOBA Bali (Hub Denpasar)')
+  const [grCarrier, setGrCarrier] = useState<string>('Armada Cold Truck Thermo HATOBA')
+  const [grTemp, setGrTemp] = useState<string>('-18.5')
+  const [grReceiver, setGrReceiver] = useState<string>('Staf Gudang & Checker HATOBA')
+  const [grPacks, setGrPacks] = useState<string>('185')
+  const [grWeight, setGrWeight] = useState<string>('185')
+  const [grNotes, setGrNotes] = useState<string>('Kargo tiba tepat waktu, suhu -18.5°C, kemasan vacuum seal beku sempurna.')
+  const [savingGr, setSavingGr] = useState<boolean>(false)
+
+  // Real-time Live Sync & Cut-Off Freeze States
+  const [isAutoSyncEnabled, setIsAutoSyncEnabled] = useState<boolean>(true)
+  const [cutoffTimestamp, setCutoffTimestamp] = useState<Date | null>(null)
 
   // Form State: Rekonsiliasi Kasir & Bank
   const [recDate, setRecDate] = useState<string>(new Date().toISOString().slice(0, 10))
@@ -158,19 +191,34 @@ export default function FinanceERPPage() {
     setTimeout(() => setToast(null), 3500)
   }
 
+  // Toggle Auto-Sync / Freeze Cut-Off Data
+  const toggleAutoSync = () => {
+    if (isAutoSyncEnabled) {
+      setIsAutoSyncEnabled(false)
+      const now = new Date()
+      setCutoffTimestamp(now)
+      showToast(`Sinkronisasi live dijeda. Data dibekukan pada Cut-Off ${now.toLocaleTimeString('id-ID')} untuk audit & pelaporan pimpinan.`, 'success')
+    } else {
+      setIsAutoSyncEnabled(true)
+      setCutoffTimestamp(null)
+      showToast('Sinkronisasi live aktif kembali. Data diperbarui real-time.', 'success')
+      fetchFinanceData(true)
+    }
+  }
+
   // 1. Initial Auth Check
   useEffect(() => {
     checkFinanceAuth()
   }, [])
 
-  // 2. Real-Time Silent Auto-Polling Interval (Data Live tanpa Refresh Manual)
+  // 2. Real-Time Silent Auto-Polling Interval (Data Live tanpa Refresh Manual - dapat dijeda untuk Cut-Off)
   useEffect(() => {
-    if (!isAuthenticated) return
+    if (!isAuthenticated || !isAutoSyncEnabled) return
     const interval = setInterval(() => {
       fetchFinanceData(true)
     }, 12000) // Sinkronisasi otomatis setiap 12 detik di latar belakang
     return () => clearInterval(interval)
-  }, [isAuthenticated])
+  }, [isAuthenticated, isAutoSyncEnabled])
 
   const checkFinanceAuth = async () => {
     try {
@@ -241,6 +289,8 @@ export default function FinanceERPPage() {
         setConfig(data.config || null)
         setJournal(data.journal || [])
         setOrders(data.orders || [])
+        setStockOpnameHistory(data.stockOpnameHistory || [])
+        setGoodsReceipts(data.goodsReceipts || [])
         setLastSyncedAt(new Date())
 
         // If report has pos stats, auto-fill verification fields if empty
@@ -350,11 +400,14 @@ export default function FinanceERPPage() {
           totalWeightKg: parseFloat(invWeightInput) || 0,
           estimatedValue: parseFloat(invValueInput.replace(/[^0-9]/g, '')) || 0,
           notes: invNotesInput.trim(),
+          inspector: invInspectorInput.trim(),
+          freezerTempCelsius: parseFloat(invTempInput) || -18.5,
+          date: new Date().toISOString().slice(0, 10),
         }),
       })
       const data = await res.json()
       if (res.ok && data.success) {
-        showToast('Nilai persediaan daging beku berhasil diperbarui di Neraca & HPP!')
+        showToast('Nilai persediaan daging beku berhasil diperbarui & tercatat di audit trail!')
         setShowInventoryModal(false)
         fetchFinanceData(true)
       } else {
@@ -365,6 +418,71 @@ export default function FinanceERPPage() {
     } finally {
       setSavingInv(false)
     }
+  }
+
+  // 5b. Submit Penerimaan Barang Masuk (Goods Receipt)
+  const handleSaveGoodsReceipt = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSavingGr(true)
+    try {
+      const res = await fetch('/api/finance/goods-receipt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          receiptDate: new Date().toISOString().slice(0, 10),
+          deliveryNoteNumber: grDeliveryNote.trim() || `SJ-HTB-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(100 + Math.random() * 900)}`,
+          sourceOrigin: grSource,
+          sourceLabel: grSourceLabel.trim(),
+          destinationHub: 'Hub Yogyakarta (Freezer Room Babarsari)',
+          carrierName: grCarrier.trim(),
+          freezerTempCelsius: parseFloat(grTemp) || -18.5,
+          receiverName: grReceiver.trim(),
+          items: [
+            {
+              productName: 'Produk Daging & Jeroan Beku Assorted',
+              packQuantity: parseInt(grPacks) || 0,
+              weightKg: parseFloat(grWeight) || 0,
+              condition: 'SEMPURNA_BEKU',
+            },
+          ],
+          notes: grNotes.trim(),
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        showToast('Penerimaan barang masuk dari pusat/supplier berhasil dicatat!')
+        setShowGoodsReceiptModal(false)
+        fetchFinanceData(true)
+      } else {
+        showToast(data.error || 'Gagal mencatat penerimaan barang.', 'error')
+      }
+    } catch {
+      showToast('Gagal terhubung ke server.', 'error')
+    } finally {
+      setSavingGr(false)
+    }
+  }
+
+  // Export Stock Opname History CSV
+  const handleExportStockOpnameCSV = () => {
+    let csv = `"HATOBA - RIWAYAT & LAPORAN STOCK OPNAME FISIK FREEZER"\n"Tanggal Unduh: ${new Date().toLocaleDateString('id-ID')}"\n\n`
+    csv += `"No","ID Opname","Tanggal","Waktu Audit","Petugas Pemeriksa","Suhu Freezer (°C)","Total Berat (Kg)","Estimasi Nilai (Rp)","Catatan Kondisi Fisik"\n`
+    stockOpnameHistory.forEach((sop, idx) => {
+      csv += `"${idx + 1}","${sop.id}","${sop.date}","${sop.recordedAt}","${sop.inspector}","${sop.freezerTempCelsius}°C","${sop.totalWeightKg}","${sop.estimatedValue}","${sop.notes}"\n`
+    })
+    downloadCSV(`HATOBA_Laporan_Stock_Opname_${new Date().toISOString().slice(0, 10)}.csv`, csv)
+    showToast('Laporan Riwayat Stock Opname berhasil diunduh!')
+  }
+
+  // Export Goods Receipt History CSV
+  const handleExportGoodsReceiptCSV = () => {
+    let csv = `"HATOBA - LAPORAN PENERIMAAN BARANG MASUK (GOODS RECEIPT)"\n"Tanggal Unduh: ${new Date().toLocaleDateString('id-ID')}"\n\n`
+    csv += `"No","ID GRN","Tanggal Terima","No. Surat Jalan","Asal Kiriman","Tujuan","Armada Pendingin","Suhu (°C)","Penerima","Total Pack","Total Berat (Kg)","Catatan"\n`
+    goodsReceipts.forEach((gr, idx) => {
+      csv += `"${idx + 1}","${gr.id}","${gr.receiptDate}","${gr.deliveryNoteNumber}","${gr.sourceLabel}","${gr.destinationHub}","${gr.carrierName}","${gr.freezerTempCelsius}°C","${gr.receiverName}","${gr.totalPacks}","${gr.totalWeightKg}","${gr.notes || '-'}"\n`
+    })
+    downloadCSV(`HATOBA_Laporan_Penerimaan_Barang_${new Date().toISOString().slice(0, 10)}.csv`, csv)
+    showToast('Laporan Penerimaan Barang berhasil diunduh!')
   }
 
   // 6. Submit Rekonsiliasi Kasir & Bank
@@ -701,6 +819,8 @@ export default function FinanceERPPage() {
         return 'Buku Pembantu Piutang (AR Aging)'
       case 'journal':
         return 'Buku Jurnal Umum Otomatis'
+      case 'goods_receipt':
+        return 'Penerimaan Barang Masuk (Goods Receipt Note - GRN)'
       case 'help':
         return 'Pusat Bantuan, SOP & Tata Kelola'
       default:
@@ -764,6 +884,14 @@ export default function FinanceERPPage() {
       label: 'Jurnal Umum',
       icon: BookOpen,
       count: journal.length,
+    },
+    {
+      id: 'goods_receipt',
+      label: 'Penerimaan Barang',
+      icon: Truck,
+      count: goodsReceipts.length,
+      badge: 'Gudang',
+      badgeColor: 'bg-cyan-700 text-white',
     },
     {
       id: 'help',
@@ -910,41 +1038,62 @@ export default function FinanceERPPage() {
             </button>
           </div>
 
-          {/* Live Sync Status Card */}
+          {/* Live Sync / Cut-off Freeze Status Card */}
           {(sidebarExpanded || mobileMenuOpen) ? (
-            <div className="p-3 mx-3 my-2.5 rounded-2xl bg-[#17211B] border border-[#2A372D] flex items-center justify-between text-xs animate-in fade-in">
+            <div className={`p-3 mx-3 my-2.5 rounded-2xl border flex items-center justify-between text-xs animate-in fade-in ${
+              isAutoSyncEnabled ? 'bg-[#17211B] border-[#2A372D]' : 'bg-[#2A2312] border-amber-600/50'
+            }`}>
               <div className="flex items-center gap-2">
                 <span
                   className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-                    isSyncing ? 'bg-amber-400 animate-ping' : 'bg-emerald-400 animate-pulse'
+                    isAutoSyncEnabled
+                      ? isSyncing ? 'bg-amber-400 animate-ping' : 'bg-emerald-400 animate-pulse'
+                      : 'bg-amber-400'
                   }`}
                 />
                 <div>
                   <div className="font-bold text-[11px] text-white flex items-center gap-1">
-                    <span>Live Real-Time</span>
-                    {isSyncing && <span className="text-[9px] text-amber-300 font-normal">Sinkron...</span>}
+                    <span>{isAutoSyncEnabled ? 'Live Real-Time' : 'Cut-Off Terkunci'}</span>
+                    {isSyncing && <span className="text-[9px] text-amber-300 font-normal">Sync...</span>}
                   </div>
                   <div className="text-[10px] text-gray-400 font-mono">
-                    {lastSyncedAt.toLocaleTimeString('id-ID')}
+                    {isAutoSyncEnabled
+                      ? lastSyncedAt.toLocaleTimeString('id-ID')
+                      : (cutoffTimestamp ? cutoffTimestamp.toLocaleTimeString('id-ID') : lastSyncedAt.toLocaleTimeString('id-ID'))}
                   </div>
                 </div>
               </div>
-              <button
-                onClick={() => fetchFinanceData(true)}
-                className="p-1 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
-                title="Sinkronkan data live"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-emerald-400' : ''}`} />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={toggleAutoSync}
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    isAutoSyncEnabled
+                      ? 'hover:bg-white/10 text-gray-400 hover:text-amber-400'
+                      : 'bg-amber-600 text-white hover:bg-amber-500'
+                  }`}
+                  title={isAutoSyncEnabled ? 'Jeda otomatis (Kunci Cut-Off data)' : 'Aktifkan sinkronisasi live'}
+                >
+                  {isAutoSyncEnabled ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                </button>
+                <button
+                  onClick={() => fetchFinanceData(true)}
+                  className="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                  title="Update snapshot data"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-emerald-400' : ''}`} />
+                </button>
+              </div>
             </div>
           ) : (
             <div className="py-2.5 flex justify-center">
               <div
                 className={`w-3 h-3 rounded-full cursor-pointer ${
-                  isSyncing ? 'bg-amber-400 animate-ping' : 'bg-emerald-400 animate-pulse'
+                  isAutoSyncEnabled
+                    ? isSyncing ? 'bg-amber-400 animate-ping' : 'bg-emerald-400 animate-pulse'
+                    : 'bg-amber-400 ring-2 ring-amber-500/40'
                 }`}
-                title={`Live Real-Time Sync: ${lastSyncedAt.toLocaleTimeString('id-ID')}`}
-                onClick={() => fetchFinanceData(true)}
+                title={isAutoSyncEnabled ? 'Live Sync Aktif (Klik untuk jeda)' : 'Cut-Off Terkunci (Klik untuk aktifkan)'}
+                onClick={toggleAutoSync}
               />
             </div>
           )}
@@ -1020,6 +1169,14 @@ export default function FinanceERPPage() {
                 <span>Stock Opname Freezer</span>
               </button>
 
+              <button
+                onClick={() => setShowGoodsReceiptModal(true)}
+                className="w-full py-2 px-3 rounded-xl bg-[#132227] hover:bg-[#1A2E35] text-cyan-400 border border-cyan-800/60 font-semibold text-xs flex items-center justify-center gap-2 transition-colors"
+              >
+                <Truck className="w-3.5 h-3.5" />
+                <span>Terima Barang (GRN)</span>
+              </button>
+
               <div className="pt-2 border-t border-[#1C2620] flex items-center justify-between text-xs text-gray-400">
                 <Link
                   href="/admin"
@@ -1058,6 +1215,13 @@ export default function FinanceERPPage() {
                 title="Stock Opname Freezer"
               >
                 <Snowflake className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setShowGoodsReceiptModal(true)}
+                className="p-2 rounded-xl bg-[#132227] hover:bg-[#1A2E35] text-cyan-400 border border-cyan-800/60 transition-colors"
+                title="Penerimaan Barang Masuk (GRN)"
+              >
+                <Truck className="w-4 h-4" />
               </button>
               <button
                 onClick={handleLogout}
@@ -1103,18 +1267,39 @@ export default function FinanceERPPage() {
 
             {/* Right: Live Sync Indicator + Quick Actions */}
             <div className="flex items-center gap-2 sm:gap-3">
-              {/* Live Real-time Indicator Pill */}
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-semibold">
+              {/* Live Real-time / Cut-off Toggle Pill */}
+              <button
+                onClick={toggleAutoSync}
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all ${
+                  isAutoSyncEnabled
+                    ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-800'
+                    : 'bg-amber-50 hover:bg-amber-100 border-amber-400 text-amber-900 ring-2 ring-amber-300/50'
+                }`}
+                title={
+                  isAutoSyncEnabled
+                    ? 'Klik untuk menjeda auto-sync & membekukan data cut-off'
+                    : 'Klik untuk mengaktifkan kembali sinkronisasi live real-time'
+                }
+              >
                 <span
-                  className={`w-2 h-2 rounded-full ${
-                    isSyncing ? 'bg-amber-500 animate-ping' : 'bg-emerald-500 animate-pulse'
+                  className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                    isAutoSyncEnabled
+                      ? isSyncing ? 'bg-amber-500 animate-ping' : 'bg-emerald-500 animate-pulse'
+                      : 'bg-amber-500'
                   }`}
                 />
                 <span className="hidden sm:inline">
-                  {isSyncing ? 'Sinkronisasi...' : `Real-time • ${lastSyncedAt.toLocaleTimeString('id-ID')}`}
+                  {isAutoSyncEnabled
+                    ? isSyncing ? 'Sinkronisasi...' : `Live • ${lastSyncedAt.toLocaleTimeString('id-ID')}`
+                    : `Cut-Off • ${cutoffTimestamp ? cutoffTimestamp.toLocaleTimeString('id-ID') : lastSyncedAt.toLocaleTimeString('id-ID')}`}
                 </span>
-                <span className="sm:hidden">{isSyncing ? 'Sync...' : 'Live'}</span>
-              </div>
+                <span className="sm:hidden">
+                  {isAutoSyncEnabled ? (isSyncing ? 'Sync...' : 'Live') : 'Freeze'}
+                </span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-black/5 font-mono">
+                  {isAutoSyncEnabled ? '⏸ Jeda' : '▶ Live'}
+                </span>
+              </button>
 
               {/* Refresh Button */}
               <button
@@ -1157,6 +1342,44 @@ export default function FinanceERPPage() {
 
         {/* ======================= MAIN CONTENT TABS ======================= */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 no-print">
+          {/* CUT-OFF FREEZE AUDIT BANNER */}
+          {!isAutoSyncEnabled && (
+            <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-400/80 text-amber-950 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-amber-200 text-amber-900 flex-shrink-0">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="font-bold text-xs sm:text-sm flex items-center gap-2">
+                    <span>Data Laporan Dibekukan (Cut-Off Period Terkunci)</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 font-bold">
+                      Audit Ready
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 mt-0.5">
+                    Cut-Off: <strong>{cutoffTimestamp ? cutoffTimestamp.toLocaleString('id-ID') : lastSyncedAt.toLocaleString('id-ID')}</strong>. Data stabil dan tidak akan bergeser otomatis oleh transaksi kasir baru untuk pelaporan atau pencetakan pimpinan.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button
+                  onClick={() => fetchFinanceData(true)}
+                  className="px-3 py-1.5 rounded-xl bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 text-xs font-bold transition-colors flex items-center gap-1.5"
+                  title="Ambil snapshot terkini tanpa mengaktifkan auto-polling"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                  <span>Update Snapshot</span>
+                </button>
+                <button
+                  onClick={toggleAutoSync}
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs"
+                >
+                  <Play className="w-3.5 h-3.5" />
+                  <span>Buka Kunci Live</span>
+                </button>
+              </div>
+            </div>
+          )}
           {/* ==================== TAB 1: OVERVIEW (RINGKASAN & ALERT MANAJEMEN) ==================== */}
           {activeTab === 'overview' && report && (
             <div className="space-y-6">
@@ -2107,8 +2330,82 @@ export default function FinanceERPPage() {
                   </span>
                 </h3>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-left">
+                {/* Mobile Card View (md:hidden) */}
+                <div className="md:hidden space-y-3">
+                  {reconciliations.map((rec) => (
+                    <div key={rec.id} className="p-4 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-bold text-xs text-[#111613]">{rec.shiftLabel}</div>
+                          <div className="text-[10px] text-gray-500 font-mono">{rec.date} • {rec.reconciledBy}</div>
+                        </div>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            rec.status === 'BALANCED'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {rec.status === 'BALANCED' ? 'BALANCED' : 'RESOLVED'}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-[11px] pt-1.5 border-t border-gray-200">
+                        <div className="p-2 rounded-xl bg-white border border-gray-100">
+                          <span className="text-gray-500 text-[10px] block font-medium">Kas Fisik vs Sistem</span>
+                          <div className="font-bold font-mono text-emerald-800 text-xs mt-0.5">
+                            {formatIDR(rec.actualCashCounted)}
+                          </div>
+                          <div className="text-[10px] text-gray-400 font-mono">Sistem: {formatIDR(rec.systemCashTotal)}</div>
+                          <span
+                            className={`inline-block mt-1 px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                              rec.cashDiscrepancy === 0
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : rec.cashDiscrepancy < 0
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-blue-100 text-blue-800'
+                            }`}
+                          >
+                            Selisih: {rec.cashDiscrepancy === 0 ? '0 (Klop)' : formatIDR(rec.cashDiscrepancy)}
+                          </span>
+                        </div>
+
+                        <div className="p-2 rounded-xl bg-white border border-gray-100">
+                          <span className="text-gray-500 text-[10px] block font-medium">Bank Valid vs Sistem</span>
+                          <div className="font-bold font-mono text-blue-800 text-xs mt-0.5">
+                            {formatIDR(rec.bankVerifiedTotal)}
+                          </div>
+                          <div className="text-[10px] text-gray-400 font-mono">Sistem: {formatIDR(rec.systemTransferTotal)}</div>
+                          <span
+                            className={`inline-block mt-1 px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                              rec.transferDiscrepancy === 0
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-blue-100 text-blue-800'
+                            }`}
+                          >
+                            Selisih: {rec.transferDiscrepancy === 0 ? '0 (Klop)' : formatIDR(rec.transferDiscrepancy)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {rec.resolutionAction && (
+                        <div className="text-[10px] text-gray-600 bg-white p-2 rounded-xl border border-gray-200">
+                          Perlakuan: <strong className="text-[#111613]">{rec.resolutionAction}</strong>
+                          {rec.notes && <span className="block text-gray-500 mt-0.5">{rec.notes}</span>}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {reconciliations.length === 0 && (
+                    <div className="py-8 text-center text-gray-400 text-xs">
+                      Belum ada catatan rekonsiliasi kasir.
+                    </div>
+                  )}
+                </div>
+
+                {/* Desktop Table View (hidden md:block) */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-xs text-left min-w-[750px]">
                     <thead className="bg-[#FAF8F5] text-gray-500 font-semibold border-b border-[#EAE4DC]">
                       <tr>
                         <th className="py-2.5 px-3">Tanggal &amp; Shift</th>
@@ -2189,10 +2486,10 @@ export default function FinanceERPPage() {
                       Seluruh arus kas masuk dan kas keluar tercatat real-time dan terhubung ke Jurnal Umum.
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
                     <button
                       onClick={handleExportTransactionsCSV}
-                      className="px-3 py-1.5 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 font-bold text-xs text-[#111613] flex items-center gap-1.5 transition-colors shadow-xs"
+                      className="flex-1 sm:flex-initial justify-center px-3 py-1.5 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 font-bold text-xs text-[#111613] flex items-center gap-1.5 transition-colors shadow-xs"
                     >
                       <Download className="w-3.5 h-3.5 text-emerald-600" />
                       <span>Unduh Excel</span>
@@ -2203,7 +2500,7 @@ export default function FinanceERPPage() {
                         setTxCategory('INCOME_AR_COLLECTION')
                         setShowAddTxModal(true)
                       }}
-                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all shadow-sm flex items-center gap-1.5"
+                      className="flex-1 sm:flex-initial justify-center px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all shadow-sm flex items-center gap-1.5"
                     >
                       <Plus className="w-4 h-4" />
                       <span>+ Catat Transaksi</span>
@@ -2211,9 +2508,79 @@ export default function FinanceERPPage() {
                   </div>
                 </div>
 
-                {/* Transactions Table */}
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-left">
+                {/* Mobile Card View (sm:hidden) */}
+                <div className="sm:hidden space-y-3">
+                  {transactions.map((tx) => {
+                    const catInfo = CATEGORY_OPTIONS[tx.category]
+                    return (
+                      <div key={tx.id} className="p-3.5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-mono text-gray-500">{tx.date}</span>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                tx.account === 'KAS'
+                                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                  : 'bg-blue-100 text-blue-900 border border-blue-300'
+                              }`}
+                            >
+                              {tx.account === 'KAS' ? 'KAS FISIK' : 'BANK MANDIRI'}
+                            </span>
+                            <button
+                              onClick={() => handleDeleteTransaction(tx.id)}
+                              className="p-1 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50"
+                              title="Hapus Transaksi"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="flex items-start justify-between gap-2 pt-1 border-t border-gray-100">
+                          <div>
+                            <div className="font-bold text-xs text-[#111613]">
+                              {catInfo?.label || tx.category}
+                            </div>
+                            <div className="text-[11px] text-gray-600 font-medium">{tx.recipientOrPayer}</div>
+                            {tx.notes && <div className="text-[10px] text-gray-400 mt-0.5">{tx.notes}</div>}
+                            {tx.referenceCode && (
+                              <div className="text-[10px] text-amber-700 font-mono mt-0.5">
+                                Ref: {tx.referenceCode}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <div
+                              className={`font-mono font-bold text-sm ${
+                                tx.type === 'IN' ? 'text-emerald-700' : 'text-red-700'
+                              }`}
+                            >
+                              {tx.type === 'IN' ? `+ ${formatIDR(tx.amount)}` : `- ${formatIDR(tx.amount)}`}
+                            </div>
+                            <span
+                              className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full uppercase ${
+                                tx.type === 'IN'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}
+                            >
+                              {tx.type === 'IN' ? 'Kas Masuk' : 'Kas Keluar'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {transactions.length === 0 && (
+                    <div className="py-8 text-center text-gray-400 text-xs">
+                      Belum ada transaksi keuangan yang dicatat.
+                    </div>
+                  )}
+                </div>
+
+                {/* Desktop Table View (hidden sm:block) */}
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="w-full text-xs text-left min-w-[700px]">
                     <thead className="bg-[#FAF8F5] text-gray-500 font-semibold border-b border-[#EAE4DC]">
                       <tr>
                         <th className="py-3 px-3">Tanggal</th>
@@ -2554,6 +2921,145 @@ export default function FinanceERPPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Riwayat & Audit Trail Stock Opname Fisik Freezer */}
+              <div className="p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
+                  <div>
+                    <h3 className="font-serif-title text-lg font-bold text-[#111613] flex items-center gap-2">
+                      <Snowflake className="w-5 h-5 text-cyan-600" />
+                      <span>Riwayat &amp; Audit Trail Stock Opname Fisik Freezer</span>
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Pencatatan berkala kondisi fisik, berat daging &amp; jeroan (Kg), suhu cold storage, serta tanggal &amp; waktu audit akurat.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleExportStockOpnameCSV}
+                      className="px-3 py-1.5 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 font-bold text-xs text-[#111613] flex items-center gap-1.5 transition-colors shadow-xs"
+                      title="Unduh Riwayat Stock Opname ke Excel"
+                    >
+                      <Download className="w-3.5 h-3.5 text-cyan-700" />
+                      <span>Unduh Excel</span>
+                    </button>
+                    <button
+                      onClick={() => setShowInventoryModal(true)}
+                      className="px-3.5 py-1.5 rounded-xl bg-cyan-700 hover:bg-cyan-800 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Catat Opname Baru</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Mobile Card View (md:hidden) */}
+                <div className="md:hidden space-y-3">
+                  {stockOpnameHistory.map((sop, idx) => (
+                    <div
+                      key={sop.id || idx}
+                      className="p-4 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-2.5 text-xs shadow-xs"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono font-bold text-cyan-900 bg-cyan-100/70 px-2 py-0.5 rounded-lg text-[11px]">
+                          {sop.id}
+                        </span>
+                        <span className="text-[11px] text-gray-500 font-mono">
+                          {sop.date} • {new Date(sop.recordedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 py-1.5 border-y border-dashed border-[#E3D9CC]">
+                        <div>
+                          <div className="text-[10px] text-gray-500 font-medium">Total Berat Fisik</div>
+                          <div className="font-mono font-bold text-[#111613] text-sm">{sop.totalWeightKg} Kg</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-gray-500 font-medium">Estimasi Nilai HPP</div>
+                          <div className="font-mono font-bold text-emerald-800 text-sm">{formatIDR(sop.estimatedValue)}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[11px] text-gray-600">
+                        <div className="flex items-center gap-1">
+                          <Thermometer className="w-3.5 h-3.5 text-cyan-600" />
+                          <span className="font-mono font-bold text-cyan-900">{sop.freezerTempCelsius}°C</span>
+                        </div>
+                        <div className="text-gray-700 font-medium truncate max-w-[180px]">
+                          Pemeriksa: <span className="font-bold">{sop.inspector}</span>
+                        </div>
+                      </div>
+
+                      {sop.notes && (
+                        <p className="text-[11px] text-gray-600 italic bg-white/70 p-2 rounded-xl border border-gray-200">
+                          &ldquo;{sop.notes}&rdquo;
+                        </p>
+                      )}
+                    </div>
+                  ))}
+
+                  {stockOpnameHistory.length === 0 && (
+                    <div className="p-8 text-center text-gray-400 bg-gray-50 rounded-2xl text-xs">
+                      Belum ada riwayat stock opname tercatat.
+                    </div>
+                  )}
+                </div>
+
+                {/* Desktop Table View (hidden md:block) */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-[#FAF8F5] text-gray-500 font-semibold border-b border-[#EAE4DC]">
+                      <tr>
+                        <th className="py-2.5 px-3">No</th>
+                        <th className="py-2.5 px-3">ID &amp; Tanggal Audit</th>
+                        <th className="py-2.5 px-3">Petugas Pemeriksa</th>
+                        <th className="py-2.5 px-3 text-center">Suhu Freezer</th>
+                        <th className="py-2.5 px-3 text-right">Total Berat</th>
+                        <th className="py-2.5 px-3 text-right">Nilai Persediaan</th>
+                        <th className="py-2.5 px-3">Catatan Kondisi Fisik</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {stockOpnameHistory.map((sop, idx) => (
+                        <tr key={sop.id || idx} className="hover:bg-gray-50/60 transition-colors">
+                          <td className="py-2.5 px-3 text-gray-400 font-mono">{idx + 1}</td>
+                          <td className="py-2.5 px-3">
+                            <div className="font-mono font-bold text-cyan-900">{sop.id}</div>
+                            <div className="text-[11px] text-gray-500 font-mono">
+                              {sop.date} • {new Date(sop.recordedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 font-semibold text-[#111613]">
+                            {sop.inspector}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-50 border border-cyan-200 text-cyan-800 font-mono font-bold text-[11px]">
+                              <Thermometer className="w-3 h-3 text-cyan-600" />
+                              {sop.freezerTempCelsius}°C
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-[#111613]">
+                            {sop.totalWeightKg} Kg
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-800">
+                            {formatIDR(sop.estimatedValue)}
+                          </td>
+                          <td className="py-2.5 px-3 text-gray-600 max-w-xs truncate" title={sop.notes}>
+                            {sop.notes || '-'}
+                          </td>
+                        </tr>
+                      ))}
+                      {stockOpnameHistory.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className="py-8 text-center text-gray-400">
+                            Belum ada riwayat stock opname fisik.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
 
@@ -2627,9 +3133,92 @@ export default function FinanceERPPage() {
                   </div>
                 </div>
 
-                {/* Pending Orders Table */}
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-left">
+                {/* Mobile Card View (md:hidden) */}
+                <div className="md:hidden space-y-3.5">
+                  {report.pendingTempoOrders.map((ord) => {
+                    const remaining = Math.max(0, ord.totalAmount - (ord.paidAmount || 0))
+                    const daysOld = Math.floor(
+                      (new Date().getTime() - new Date(ord.createdAt).getTime()) / (1000 * 60 * 60 * 24)
+                    )
+                    const isOverdue = daysOld > 3
+
+                    return (
+                      <div key={ord.id} className="p-4 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="font-mono font-bold text-xs text-[#111613]">INV-{ord.referenceCode}</span>
+                            <span className="text-[10px] text-gray-500 font-mono block">
+                              {new Date(ord.createdAt).toLocaleDateString('id-ID')}
+                            </span>
+                          </div>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              isOverdue
+                                ? 'bg-red-100 text-red-800 border border-red-300'
+                                : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            }`}
+                          >
+                            {isOverdue ? `Lewat (${daysOld} hr)` : 'Lancar (0-3 hr)'}
+                          </span>
+                        </div>
+
+                        <div className="pt-1.5 border-t border-gray-200">
+                          <div className="font-bold text-xs text-[#111613]">{ord.customerName}</div>
+                          {ord.businessName && (
+                            <div className="text-[11px] text-gray-600 font-medium">{ord.businessName}</div>
+                          )}
+                          {ord.phone && (
+                            <a
+                              href={`https://wa.me/${ord.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                                `Halo Kak ${ord.customerName}, konfirmasi dari Tim Finance HATOBA terkait tagihan tempo INV-${ord.referenceCode} sebesar ${formatIDR(
+                                  remaining
+                                )}. Mohon konfirmasi jadwal pelunasannya. Terima kasih.`
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-[11px] text-emerald-700 hover:text-emerald-800 font-semibold mt-1 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200"
+                            >
+                              <PhoneCall className="w-3.5 h-3.5" />
+                              <span>Hubungi via WA ({ord.phone})</span>
+                            </a>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-white border border-gray-200 text-center font-mono text-[11px]">
+                          <div>
+                            <span className="text-[9px] text-gray-500 block">Total Tagihan</span>
+                            <span className="font-medium text-gray-700">{formatIDR(ord.totalAmount)}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-gray-500 block">Sudah Dibayar</span>
+                            <span className="font-medium text-emerald-700">{formatIDR(ord.paidAmount || 0)}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] text-red-600 font-bold block">Sisa Piutang</span>
+                            <span className="font-bold text-red-700 text-xs">{formatIDR(remaining)}</span>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => quickSettleAR(ord)}
+                          className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors shadow-xs flex items-center justify-center gap-1.5"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Catat Pelunasan Tagihan</span>
+                        </button>
+                      </div>
+                    )
+                  })}
+                  {report.pendingTempoOrders.length === 0 && (
+                    <div className="py-8 text-center text-gray-400 text-xs">
+                      Tidak ada piutang tempo yang menggantung. Semua pesanan Lunas!
+                    </div>
+                  )}
+                </div>
+
+                {/* Desktop Table View (hidden md:block) */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-xs text-left min-w-[750px]">
                     <thead className="bg-[#FAF8F5] text-gray-500 font-semibold border-b border-[#EAE4DC]">
                       <tr>
                         <th className="py-3 px-3">No. Invoice &amp; Tanggal</th>
@@ -2747,8 +3336,77 @@ export default function FinanceERPPage() {
                   </div>
                 </div>
 
-                {/* Journal Table */}
-                <div className="overflow-x-auto">
+                {/* Journal Mobile Cards View (sm:hidden) */}
+                <div className="sm:hidden space-y-3">
+                  {journal.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="p-4 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-2.5 text-xs shadow-xs"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="font-bold text-[#111613] leading-snug">{entry.description}</div>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-gray-200 text-gray-700 whitespace-nowrap">
+                          {entry.referenceNo}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-gray-500 font-mono">
+                        {entry.date}
+                      </div>
+
+                      <div className="space-y-1.5 pt-2 border-t border-dashed border-[#E3D9CC]">
+                        {entry.lines.map((line, idx) => (
+                          <div
+                            key={idx}
+                            className={`p-2 rounded-xl flex items-center justify-between text-[11px] ${
+                              line.debit > 0
+                                ? 'bg-emerald-50/70 border border-emerald-100'
+                                : 'bg-amber-50/70 border border-amber-100 ml-2'
+                            }`}
+                          >
+                            <div className="space-y-0.5 max-w-[65%]">
+                              <span className="font-mono text-[10px] text-gray-500 block">
+                                {line.accountCode}
+                              </span>
+                              <span className="font-semibold text-[#111613] truncate block">
+                                {line.accountName}
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              {line.debit > 0 ? (
+                                <div>
+                                  <span className="text-[9px] uppercase tracking-wider text-emerald-700 font-bold block">
+                                    Debit
+                                  </span>
+                                  <span className="font-mono font-bold text-emerald-800">
+                                    {formatIDR(line.debit)}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div>
+                                  <span className="text-[9px] uppercase tracking-wider text-amber-700 font-bold block">
+                                    Kredit
+                                  </span>
+                                  <span className="font-mono font-bold text-amber-900">
+                                    {formatIDR(line.credit)}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                  {journal.length === 0 && (
+                    <div className="p-8 text-center text-gray-400 bg-gray-50 rounded-2xl text-xs">
+                      Belum ada entri jurnal umum.
+                    </div>
+                  )}
+                </div>
+
+                {/* Journal Table Desktop View (hidden sm:block) */}
+                <div className="hidden sm:block overflow-x-auto">
                   <table className="w-full text-xs text-left">
                     <thead className="bg-[#FAF8F5] text-gray-500 font-semibold border-b border-[#EAE4DC]">
                       <tr>
@@ -2803,7 +3461,222 @@ export default function FinanceERPPage() {
             </div>
           )}
 
-          {/* ==================== TAB 10: PANDUAN & SOP HELP ==================== */}
+          {/* ==================== TAB 10: PENERIMAAN BARANG MASUK (GOODS RECEIPT) ==================== */}
+          {activeTab === 'goods_receipt' && (
+            <div className="space-y-6">
+              {/* Summary Stats Row */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-5 rounded-2xl bg-white border border-[#E3D9CC] shadow-xs">
+                  <div className="flex items-center justify-between text-gray-500 mb-1">
+                    <span className="text-xs font-semibold">Total Dokumen GRN</span>
+                    <Truck className="w-4 h-4 text-cyan-600" />
+                  </div>
+                  <div className="text-xl sm:text-2xl font-bold font-mono text-[#111613]">
+                    {goodsReceipts.length}
+                    <span className="text-xs text-gray-500 font-sans font-normal ml-1">Pengiriman</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-1">Surat jalan pasokan masuk</p>
+                </div>
+
+                <div className="p-5 rounded-2xl bg-white border border-[#E3D9CC] shadow-xs">
+                  <div className="flex items-center justify-between text-gray-500 mb-1">
+                    <span className="text-xs font-semibold">Total Berat Tiba</span>
+                    <Box className="w-4 h-4 text-cyan-600" />
+                  </div>
+                  <div className="text-xl sm:text-2xl font-bold font-mono text-cyan-900">
+                    {goodsReceipts.reduce((sum, g) => sum + g.totalWeightKg, 0).toLocaleString('id-ID')}
+                    <span className="text-xs text-gray-500 font-sans font-normal ml-1">Kg</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-1">Daging &amp; jeroan beku masuk</p>
+                </div>
+
+                <div className="p-5 rounded-2xl bg-white border border-[#E3D9CC] shadow-xs">
+                  <div className="flex items-center justify-between text-gray-500 mb-1">
+                    <span className="text-xs font-semibold">Total Kemasan</span>
+                    <PackageCheck className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <div className="text-xl sm:text-2xl font-bold font-mono text-emerald-900">
+                    {goodsReceipts.reduce((sum, g) => sum + g.totalPacks, 0).toLocaleString('id-ID')}
+                    <span className="text-xs text-gray-500 font-sans font-normal ml-1">Pack</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-1">Vacuum sealed pack</p>
+                </div>
+
+                <div className="p-5 rounded-2xl bg-white border border-[#E3D9CC] shadow-xs">
+                  <div className="flex items-center justify-between text-gray-500 mb-1">
+                    <span className="text-xs font-semibold">Suhu Rantai Dingin</span>
+                    <Thermometer className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div className="text-xl sm:text-2xl font-bold font-mono text-blue-900">
+                    -18.5°C
+                  </div>
+                  <p className="text-[11px] text-emerald-600 font-semibold mt-1">✓ Standar Cold Chain Terjaga</p>
+                </div>
+              </div>
+
+              {/* Main Goods Receipt List Card */}
+              <div className="p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
+                  <div>
+                    <h2 className="font-serif-title text-xl font-bold text-[#111613] flex items-center gap-2">
+                      <Truck className="w-5 h-5 text-cyan-600" />
+                      <span>Buku Penerimaan Barang Masuk (Goods Receipt Note - GRN)</span>
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Pencatatan pasokan produk daging beku dari Sentra Produksi Bali atau Supplier RPH ke Hub Gudang Babarsari.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleExportGoodsReceiptCSV}
+                      className="px-3 py-1.5 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 font-bold text-xs text-[#111613] flex items-center gap-1.5 transition-colors shadow-xs"
+                      title="Unduh Laporan Penerimaan Barang ke Excel"
+                    >
+                      <Download className="w-3.5 h-3.5 text-cyan-700" />
+                      <span>Unduh Excel</span>
+                    </button>
+                    <button
+                      onClick={() => setShowGoodsReceiptModal(true)}
+                      className="px-3.5 py-1.5 rounded-xl bg-cyan-700 hover:bg-cyan-800 text-white font-bold text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Catat Penerimaan Barang</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Mobile Cards View (md:hidden) */}
+                <div className="md:hidden space-y-3">
+                  {goodsReceipts.map((gr, idx) => (
+                    <div
+                      key={gr.id || idx}
+                      className="p-4 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-2.5 text-xs shadow-xs"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="font-mono font-bold text-cyan-900 text-xs">
+                            {gr.deliveryNoteNumber}
+                          </div>
+                          <div className="text-[11px] text-gray-500 font-mono mt-0.5">
+                            GRN: {gr.id} • {gr.receiptDate}
+                          </div>
+                        </div>
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-50 border border-cyan-200 text-cyan-800 font-mono font-bold text-[10px]">
+                          <Thermometer className="w-3 h-3 text-cyan-600" />
+                          {gr.freezerTempCelsius}°C
+                        </span>
+                      </div>
+
+                      <div className="text-[11px] space-y-1 bg-white/70 p-2.5 rounded-xl border border-gray-100">
+                        <div className="flex items-center gap-1.5 text-gray-700">
+                          <span className="font-semibold text-gray-500">Asal:</span>
+                          <span className="font-medium truncate">{gr.sourceLabel}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-gray-700">
+                          <span className="font-semibold text-gray-500">Armada:</span>
+                          <span className="truncate">{gr.carrierName}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-gray-700">
+                          <span className="font-semibold text-gray-500">Penerima:</span>
+                          <span className="font-medium">{gr.receiverName}</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 py-1.5 border-y border-dashed border-[#E3D9CC]">
+                        <div>
+                          <div className="text-[10px] text-gray-500 font-medium">Jumlah Kemasan</div>
+                          <div className="font-mono font-bold text-[#111613] text-sm">{gr.totalPacks} Pack</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-gray-500 font-medium">Total Berat Masuk</div>
+                          <div className="font-mono font-bold text-cyan-900 text-sm">{gr.totalWeightKg} Kg</div>
+                        </div>
+                      </div>
+
+                      {gr.notes && (
+                        <p className="text-[11px] text-gray-600 italic bg-white/70 p-2 rounded-xl border border-gray-200">
+                          &ldquo;{gr.notes}&rdquo;
+                        </p>
+                      )}
+                    </div>
+                  ))}
+
+                  {goodsReceipts.length === 0 && (
+                    <div className="p-8 text-center text-gray-400 bg-gray-50 rounded-2xl text-xs">
+                      Belum ada pencatatan penerimaan barang masuk.
+                    </div>
+                  )}
+                </div>
+
+                {/* Desktop Table View (hidden md:block) */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-[#FAF8F5] text-gray-500 font-semibold border-b border-[#EAE4DC]">
+                      <tr>
+                        <th className="py-2.5 px-3">No</th>
+                        <th className="py-2.5 px-3">No. Surat Jalan &amp; ID</th>
+                        <th className="py-2.5 px-3">Tanggal Tiba</th>
+                        <th className="py-2.5 px-3">Asal Kiriman</th>
+                        <th className="py-2.5 px-3">Armada &amp; Suhu</th>
+                        <th className="py-2.5 px-3">Penerima Gudang</th>
+                        <th className="py-2.5 px-3 text-right">Kemasan</th>
+                        <th className="py-2.5 px-3 text-right">Total Berat</th>
+                        <th className="py-2.5 px-3">Kondisi &amp; Catatan</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {goodsReceipts.map((gr, idx) => (
+                        <tr key={gr.id || idx} className="hover:bg-gray-50/60 transition-colors">
+                          <td className="py-2.5 px-3 text-gray-400 font-mono">{idx + 1}</td>
+                          <td className="py-2.5 px-3">
+                            <div className="font-mono font-bold text-cyan-950">{gr.deliveryNoteNumber}</div>
+                            <div className="text-[11px] text-gray-400 font-mono">{gr.id}</div>
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-gray-600 whitespace-nowrap">
+                            {gr.receiptDate}
+                          </td>
+                          <td className="py-2.5 px-3 max-w-[200px]">
+                            <div className="font-medium text-[#111613] truncate" title={gr.sourceLabel}>
+                              {gr.sourceLabel}
+                            </div>
+                            <div className="text-[10px] text-gray-400 font-mono">Hub Yogyakarta</div>
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <div className="text-gray-700 truncate max-w-[150px]" title={gr.carrierName}>
+                              {gr.carrierName}
+                            </div>
+                            <span className="inline-flex items-center gap-1 text-[10px] text-cyan-800 font-mono font-bold">
+                              <Thermometer className="w-3 h-3 text-cyan-600" />
+                              {gr.freezerTempCelsius}°C
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 font-medium text-[#111613]">
+                            {gr.receiverName}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-[#111613]">
+                            {gr.totalPacks} Pack
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-cyan-900">
+                            {gr.totalWeightKg} Kg
+                          </td>
+                          <td className="py-2.5 px-3 text-gray-600 max-w-xs truncate" title={gr.notes}>
+                            {gr.notes || '-'}
+                          </td>
+                        </tr>
+                      ))}
+                      {goodsReceipts.length === 0 && (
+                        <tr>
+                          <td colSpan={9} className="py-8 text-center text-gray-400">
+                            Belum ada dokumen penerimaan barang masuk dari supplier/pusat.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
           {activeTab === 'help' && (
             <div className="space-y-6">
               <div className="p-6 sm:p-8 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-6">
@@ -3481,11 +4354,12 @@ export default function FinanceERPPage() {
           <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-[#E3D9CC] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             <div className="px-6 py-4 bg-[#FAF8F5] border-b border-[#EAE4DC] flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-sm text-[#111613]">
+                <h3 className="font-bold text-sm text-[#111613] flex items-center gap-2">
+                  <Snowflake className="w-4 h-4 text-cyan-600" />
                   Stock Opname Fisik Freezer (-18°C)
                 </h3>
                 <p className="text-[11px] text-gray-500">
-                  Update nilai stok persediaan akhir untuk menghitung HPP riil
+                  Update nilai persediaan akhir untuk HPP &amp; audit trail otomatis
                 </p>
               </div>
               <button
@@ -3498,24 +4372,42 @@ export default function FinanceERPPage() {
             </div>
 
             <form onSubmit={handleSaveInventory} className="p-6 space-y-4 text-xs">
-              <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-[11px] leading-relaxed">
-                ❄️ <strong>Tips Cut-Off:</strong> Timbang atau hitung jumlah pack daging &amp; jeroan di freezer saat cut-off mingguan. Nilai ini menjadi <em>Persediaan Akhir</em> di Neraca dan pengurang HPP.
+              <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-[11px] leading-relaxed flex items-center justify-between">
+                <div>
+                  ❄️ <strong>Audit Otomatis:</strong> Tanggal &amp; jam opname tercatat otomatis ke riwayat audit trail pimpinan.
+                </div>
+                <span className="text-[10px] font-mono font-bold bg-blue-200 text-blue-950 px-2 py-0.5 rounded-full ml-2 whitespace-nowrap">
+                  {new Date().toISOString().slice(0, 10)}
+                </span>
               </div>
 
-              <div className="space-y-1">
-                <label className="block font-bold text-gray-700">Total Berat Daging &amp; Jeroan (Kg)</label>
-                <input
-                  type="number"
-                  step="0.5"
-                  value={invWeightInput}
-                  onChange={(e) => {
-                    const w = parseFloat(e.target.value) || 0
-                    setInvWeightInput(e.target.value)
-                    setInvValueInput(String(Math.round(w * 70000)))
-                  }}
-                  className="w-full p-2.5 rounded-xl bg-white border border-[#D8CEBE] text-xs font-mono font-bold text-[#111613]"
-                  required
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block font-bold text-gray-700">Total Berat Daging (Kg)</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={invWeightInput}
+                    onChange={(e) => {
+                      const w = parseFloat(e.target.value) || 0
+                      setInvWeightInput(e.target.value)
+                      setInvValueInput(String(Math.round(w * 70000)))
+                    }}
+                    className="w-full p-2.5 rounded-xl bg-white border border-[#D8CEBE] text-xs font-mono font-bold text-[#111613]"
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="block font-bold text-gray-700">Suhu Freezer (°C)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={invTempInput}
+                    onChange={(e) => setInvTempInput(e.target.value)}
+                    className="w-full p-2.5 rounded-xl bg-white border border-[#D8CEBE] text-xs font-mono font-bold text-[#111613]"
+                    required
+                  />
+                </div>
               </div>
 
               <div className="space-y-1">
@@ -3530,6 +4422,19 @@ export default function FinanceERPPage() {
                     required
                   />
                 </div>
+                <p className="text-[10px] text-gray-400">Estimasi otomatis: Berat × Rp 70.000 / Kg (dapat disesuaikan)</p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block font-bold text-gray-700">Petugas Pemeriksa (Checker)</label>
+                <input
+                  type="text"
+                  value={invInspectorInput}
+                  onChange={(e) => setInvInspectorInput(e.target.value)}
+                  placeholder="Nama staf gudang / akuntansi..."
+                  className="w-full p-2.5 rounded-xl bg-white border border-[#D8CEBE] text-xs text-[#111613]"
+                  required
+                />
               </div>
 
               <div className="space-y-1">
@@ -3553,9 +4458,163 @@ export default function FinanceERPPage() {
                 <button
                   type="submit"
                   disabled={savingInv}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all shadow-sm disabled:opacity-50"
+                  className="px-5 py-2.5 rounded-xl bg-cyan-700 hover:bg-cyan-800 text-white font-bold text-xs transition-all shadow-sm disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  {savingInv ? 'Menyimpan...' : 'Perbarui Neraca & HPP'}
+                  <Snowflake className="w-3.5 h-3.5" />
+                  {savingInv ? 'Menyimpan...' : 'Simpan Stock Opname'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================= MODAL: PENERIMAAN BARANG MASUK (GOODS RECEIPT) ======================= */}
+      {showGoodsReceiptModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs font-sans no-print">
+          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-[#E3D9CC] animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 bg-[#FAF8F5] border-b border-[#EAE4DC] flex items-center justify-between sticky top-0 z-10">
+              <div>
+                <h3 className="font-bold text-sm text-[#111613] flex items-center gap-2">
+                  <Truck className="w-4 h-4 text-cyan-600" />
+                  Catat Penerimaan Barang Masuk (GRN)
+                </h3>
+                <p className="text-[11px] text-gray-500">
+                  Surat Jalan dari Sentra Produksi Bali / Supplier ke Gudang Hub
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGoodsReceiptModal(false)}
+                className="p-1 rounded-lg hover:bg-gray-200 text-gray-500 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveGoodsReceipt} className="p-6 space-y-4 text-xs">
+              <div className="space-y-1">
+                <label className="block font-bold text-gray-700">No. Surat Jalan (Delivery Note)</label>
+                <input
+                  type="text"
+                  value={grDeliveryNote}
+                  onChange={(e) => setGrDeliveryNote(e.target.value)}
+                  placeholder="Contoh: SJ-HTB-DPS-20261116-083"
+                  className="w-full p-2.5 rounded-xl bg-white border border-[#D8CEBE] font-mono text-xs text-[#111613]"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block font-bold text-gray-700">Asal Kiriman</label>
+                <select
+                  value={grSource}
+                  onChange={(e) => {
+                    const val = e.target.value as any
+                    setGrSource(val)
+                    if (val === 'PUSAT_BALI') {
+                      setGrSourceLabel('Sentra Produksi Cold Storage HATOBA Bali (Hub Denpasar)')
+                    } else if (val === 'SUPPLIER_RPH') {
+                      setGrSourceLabel('Supplier RPH Daging Sapi Mitra')
+                    } else {
+                      setGrSourceLabel('Vendor / Mitra Pengadaan Eksternal')
+                    }
+                  }}
+                  className="w-full p-2.5 rounded-xl bg-white border border-[#D8CEBE] text-xs text-[#111613]"
+                >
+                  <option value="PUSAT_BALI">Sentra Produksi / Cold Storage HATOBA Bali</option>
+                  <option value="SUPPLIER_RPH">Supplier / RPH Langsung</option>
+                  <option value="VENDOR_LAIN">Vendor / Mitra Pengadaan Lain</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block font-bold text-gray-700">Armada Pendingin</label>
+                  <input
+                    type="text"
+                    value={grCarrier}
+                    onChange={(e) => setGrCarrier(e.target.value)}
+                    placeholder="Nama / Plat thermo cold truck"
+                    className="w-full p-2.5 rounded-xl bg-white border border-[#D8CEBE] text-xs text-[#111613]"
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="block font-bold text-gray-700">Suhu Tiba (°C)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={grTemp}
+                    onChange={(e) => setGrTemp(e.target.value)}
+                    className="w-full p-2.5 rounded-xl bg-white border border-[#D8CEBE] font-mono text-xs font-bold text-[#111613]"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block font-bold text-gray-700">Total Pack Diterima</label>
+                  <input
+                    type="number"
+                    value={grPacks}
+                    onChange={(e) => setGrPacks(e.target.value)}
+                    className="w-full p-2.5 rounded-xl bg-white border border-[#D8CEBE] font-mono text-xs font-bold text-[#111613]"
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="block font-bold text-gray-700">Total Berat (Kg)</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={grWeight}
+                    onChange={(e) => setGrWeight(e.target.value)}
+                    className="w-full p-2.5 rounded-xl bg-white border border-[#D8CEBE] font-mono text-xs font-bold text-[#111613]"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block font-bold text-gray-700">Nama Petugas Penerima Gudang</label>
+                <input
+                  type="text"
+                  value={grReceiver}
+                  onChange={(e) => setGrReceiver(e.target.value)}
+                  placeholder="Nama staf penerima..."
+                  className="w-full p-2.5 rounded-xl bg-white border border-[#D8CEBE] text-xs text-[#111613]"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block font-bold text-gray-700">Catatan Kondisi Fisik &amp; Kemasan</label>
+                <textarea
+                  value={grNotes}
+                  onChange={(e) => setGrNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Contoh: Suhu -18.5°C, kemasan vacuum seal beku sempurna, tidak ada kebocoran."
+                  className="w-full p-2.5 rounded-xl bg-white border border-[#D8CEBE] text-xs text-[#111613]"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowGoodsReceiptModal(false)}
+                  className="px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-100 font-semibold text-xs"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingGr}
+                  className="px-5 py-2.5 rounded-xl bg-cyan-700 hover:bg-cyan-800 text-white font-bold text-xs transition-all shadow-sm disabled:opacity-50 flex items-center gap-2"
+                >
+                  <PackageCheck className="w-4 h-4" />
+                  {savingGr ? 'Menyimpan GRN...' : 'Simpan Penerimaan Barang'}
                 </button>
               </div>
             </form>

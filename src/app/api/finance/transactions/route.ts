@@ -8,6 +8,8 @@ import {
   generateGeneralJournal,
   getInventorySnapshot,
   getFinanceConfig,
+  getStockOpnameHistory,
+  getGoodsReceipts,
   FinanceCategory,
 } from '@/lib/finance-store'
 import { getAdminOrders } from '@/lib/admin-store'
@@ -26,12 +28,14 @@ export async function GET() {
   }
 
   try {
-    const [transactions, report, inventory, config, orders] = await Promise.all([
+    const [transactions, report, inventory, config, orders, stockOpnameHistory, goodsReceipts] = await Promise.all([
       getFinanceTransactions(),
       computeFinancialReport(),
       getInventorySnapshot(),
       getFinanceConfig(),
       getAdminOrders(),
+      getStockOpnameHistory(),
+      getGoodsReceipts(),
     ])
 
     const journal = generateGeneralJournal(transactions)
@@ -44,6 +48,8 @@ export async function GET() {
       config,
       journal,
       orders,
+      stockOpnameHistory,
+      goodsReceipts,
     })
   } catch (err) {
     return NextResponse.json(

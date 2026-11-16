@@ -17,19 +17,23 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const { totalWeightKg, estimatedValue, notes, date } = body
+    const { totalWeightKg, estimatedValue, notes, date, inspector, freezerTempCelsius } = body
 
     if (typeof estimatedValue !== 'number') {
       return NextResponse.json({ error: 'Nilai taksiran persediaan wajib berupa angka.' }, { status: 400 })
     }
 
-    const snapshot = await updateInventorySnapshot({
-      date: date || new Date().toISOString().slice(0, 10),
-      totalWeightKg: Number(totalWeightKg) || 0,
-      estimatedValue: Number(estimatedValue),
-      notes: notes || 'Stock opname fisik daging & jeroan beku di freezer',
-      recordedAt: new Date().toISOString(),
-    })
+    const snapshot = await updateInventorySnapshot(
+      {
+        date: date || new Date().toISOString().slice(0, 10),
+        totalWeightKg: Number(totalWeightKg) || 0,
+        estimatedValue: Number(estimatedValue),
+        notes: notes || 'Stock opname fisik daging & jeroan beku di freezer',
+        recordedAt: new Date().toISOString(),
+      },
+      typeof inspector === 'string' && inspector.trim() ? inspector.trim() : undefined,
+      typeof freezerTempCelsius === 'number' || (typeof freezerTempCelsius === 'string' && freezerTempCelsius !== '') ? Number(freezerTempCelsius) : undefined
+    )
 
     const report = await computeFinancialReport()
 

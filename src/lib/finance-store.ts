@@ -260,6 +260,41 @@ export interface InventorySnapshot {
   recordedAt: string
 }
 
+export interface StockOpnameRecord {
+  id: string
+  date: string // YYYY-MM-DD
+  recordedAt: string // ISO timestamp
+  inspector: string
+  totalWeightKg: number
+  estimatedValue: number
+  freezerTempCelsius: number
+  notes: string
+}
+
+export interface GoodsReceiptItem {
+  productName: string
+  packQuantity: number
+  weightKg: number
+  condition: 'SEMPURNA_BEKU' | 'KEMASAN_RUSAK' | 'SUHU_DROP'
+}
+
+export interface GoodsReceiptRecord {
+  id: string
+  receiptDate: string // YYYY-MM-DD
+  receivedAt: string // ISO timestamp
+  deliveryNoteNumber: string // No. Surat Jalan (misal: SJ-HTB-DPS-20261114-082)
+  sourceOrigin: 'PUSAT_BALI' | 'SUPPLIER_RPH' | 'VENDOR_LAIN'
+  sourceLabel: string
+  destinationHub: string
+  carrierName: string
+  freezerTempCelsius: number
+  receiverName: string
+  items: GoodsReceiptItem[]
+  totalPacks: number
+  totalWeightKg: number
+  notes?: string
+}
+
 export interface InitialCapitalConfig {
   initialCash: number
   initialBank: number
@@ -420,9 +455,106 @@ export async function getInventorySnapshot(): Promise<InventorySnapshot> {
   return cachedInventory
 }
 
-export async function updateInventorySnapshot(snapshot: InventorySnapshot): Promise<InventorySnapshot> {
+let cachedStockOpnameHistory: StockOpnameRecord[] = [
+  {
+    id: 'SOP-20261110-01',
+    date: '2026-11-10',
+    recordedAt: '2026-11-10T20:30:00Z',
+    inspector: 'Checker Gudang Bali',
+    totalWeightKg: 195,
+    estimatedValue: 13650000,
+    freezerTempCelsius: -18.5,
+    notes: 'Opname rutin mingguan freezer 1 & 2. Kemasan vacuum seal utuh sempurna.',
+  },
+  {
+    id: 'SOP-20261116-02',
+    date: '2026-11-16',
+    recordedAt: '2026-11-16T18:00:00Z',
+    inspector: 'Finance Lead & Checker',
+    totalWeightKg: 185,
+    estimatedValue: 12950000,
+    freezerTempCelsius: -19.0,
+    notes: 'Stok fisik daging & jeroan beku tersimpan rapi di freezer suhu -19°C.',
+  },
+]
+
+export async function getStockOpnameHistory(): Promise<StockOpnameRecord[]> {
+  return cachedStockOpnameHistory.sort(
+    (a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime()
+  )
+}
+
+export async function addStockOpnameRecord(
+  payload: Omit<StockOpnameRecord, 'id' | 'recordedAt'>
+): Promise<StockOpnameRecord> {
+  const newRecord: StockOpnameRecord = {
+    ...payload,
+    id: `SOP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(100 + Math.random() * 900)}`,
+    recordedAt: new Date().toISOString(),
+  }
+  cachedStockOpnameHistory.unshift(newRecord)
+  return newRecord
+}
+
+export async function updateInventorySnapshot(
+  snapshot: InventorySnapshot,
+  inspector?: string,
+  freezerTempCelsius?: number
+): Promise<InventorySnapshot> {
   cachedInventory = snapshot
+  // Otomatis catat ke riwayat stock opname agar ada audit trail tanggal & jam
+  await addStockOpnameRecord({
+    date: snapshot.date,
+    inspector: inspector || 'Tim Akuntansi & Checker Gudang',
+    totalWeightKg: snapshot.totalWeightKg,
+    estimatedValue: snapshot.estimatedValue,
+    freezerTempCelsius: freezerTempCelsius ?? -18.5,
+    notes: snapshot.notes || 'Pembaruan berkala nilai persediaan freezer',
+  })
   return cachedInventory
+}
+
+// ==================== GOODS RECEIPT ENGINE (PENERIMAAN BARANG MASUK) ====================
+let cachedGoodsReceipts: GoodsReceiptRecord[] = [
+  {
+    id: 'GRN-20261114-01',
+    receiptDate: '2026-11-14',
+    receivedAt: '2026-11-14T09:15:00Z',
+    deliveryNoteNumber: 'SJ-HTB-DPS-20261114-082',
+    sourceOrigin: 'PUSAT_BALI',
+    sourceLabel: 'Sentra Produksi Cold Storage HATOBA Bali (Hub Denpasar)',
+    destinationHub: 'Hub Yogyakarta (Freezer Room Babarsari)',
+    carrierName: 'Armada Pendingin Cold Truck HATOBA (Plat DK-8891-AB)',
+    freezerTempCelsius: -18.5,
+    receiverName: 'Staf Gudang & Checker HATOBA',
+    items: [
+      { productName: 'Iga Sapi Super (1 Kg)', packQuantity: 50, weightKg: 50, condition: 'SEMPURNA_BEKU' },
+      { productName: 'Babat Sapi Putih Bersih (1 Kg)', packQuantity: 60, weightKg: 60, condition: 'SEMPURNA_BEKU' },
+      { productName: 'Iso / Usus Sapi Lembut (1 Kg)', packQuantity: 40, weightKg: 40, condition: 'SEMPURNA_BEKU' },
+      { productName: 'Paru Sapi Segar Gurih (1 Kg)', packQuantity: 35, weightKg: 35, condition: 'SEMPURNA_BEKU' },
+    ],
+    totalPacks: 185,
+    totalWeightKg: 185,
+    notes: 'Kargo tiba tepat waktu, suhu thermo -18.5°C, kemasan vacuum seal rapat tanpa kebocoran.',
+  },
+]
+
+export async function getGoodsReceipts(): Promise<GoodsReceiptRecord[]> {
+  return cachedGoodsReceipts.sort(
+    (a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+  )
+}
+
+export async function addGoodsReceipt(
+  payload: Omit<GoodsReceiptRecord, 'id' | 'receivedAt'>
+): Promise<GoodsReceiptRecord> {
+  const newReceipt: GoodsReceiptRecord = {
+    ...payload,
+    id: `GRN-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(100 + Math.random() * 900)}`,
+    receivedAt: new Date().toISOString(),
+  }
+  cachedGoodsReceipts.unshift(newReceipt)
+  return newReceipt
 }
 
 export async function getFinanceConfig(): Promise<InitialCapitalConfig> {
