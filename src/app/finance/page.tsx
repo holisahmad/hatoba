@@ -1237,7 +1237,7 @@ export default function FinanceERPPage() {
 
       {/* ======================= MAIN WORKSPACE AREA ======================= */}
       <div
-        className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ease-in-out ${
+        className={`flex-1 flex flex-col min-h-screen min-w-0 w-full max-w-full overflow-x-hidden transition-all duration-300 ease-in-out ${
           sidebarExpanded ? 'lg:pl-64' : 'lg:pl-20'
         }`}
       >
@@ -1341,7 +1341,7 @@ export default function FinanceERPPage() {
         </header>
 
         {/* ======================= MAIN CONTENT TABS ======================= */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 no-print">
+        <main className="flex-1 min-w-0 w-full max-w-full p-4 sm:p-6 lg:p-8 space-y-6 no-print">
           {/* CUT-OFF FREEZE AUDIT BANNER */}
           {!isAutoSyncEnabled && (
             <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-400/80 text-amber-950 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
@@ -2923,18 +2923,18 @@ export default function FinanceERPPage() {
               </div>
 
               {/* Riwayat & Audit Trail Stock Opname Fisik Freezer */}
-              <div className="p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-5">
+              <div className="p-5 sm:p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-5 w-full min-w-0 overflow-hidden">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
                   <div>
                     <h3 className="font-serif-title text-lg font-bold text-[#111613] flex items-center gap-2">
-                      <Snowflake className="w-5 h-5 text-cyan-600" />
+                      <Snowflake className="w-5 h-5 text-cyan-600 flex-shrink-0" />
                       <span>Riwayat &amp; Audit Trail Stock Opname Fisik Freezer</span>
                     </h3>
                     <p className="text-xs text-gray-500 mt-1">
                       Pencatatan berkala kondisi fisik, berat daging &amp; jeroan (Kg), suhu cold storage, serta tanggal &amp; waktu audit akurat.
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     <button
                       onClick={handleExportStockOpnameCSV}
                       className="px-3 py-1.5 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 font-bold text-xs text-[#111613] flex items-center gap-1.5 transition-colors shadow-xs"
@@ -3006,8 +3006,8 @@ export default function FinanceERPPage() {
                 </div>
 
                 {/* Desktop Table View (hidden md:block) */}
-                <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full text-xs text-left">
+                <div className="hidden md:block overflow-x-auto w-full border border-gray-100 rounded-2xl">
+                  <table className="w-full text-xs text-left min-w-[750px]">
                     <thead className="bg-[#FAF8F5] text-gray-500 font-semibold border-b border-[#EAE4DC]">
                       <tr>
                         <th className="py-2.5 px-3">No</th>
@@ -3406,8 +3406,8 @@ export default function FinanceERPPage() {
                 </div>
 
                 {/* Journal Table Desktop View (hidden sm:block) */}
-                <div className="hidden sm:block overflow-x-auto">
-                  <table className="w-full text-xs text-left">
+                <div className="hidden sm:block overflow-x-auto w-full border border-gray-100 rounded-2xl">
+                  <table className="w-full text-xs text-left min-w-[650px]">
                     <thead className="bg-[#FAF8F5] text-gray-500 font-semibold border-b border-[#EAE4DC]">
                       <tr>
                         <th className="py-3 px-3">Tanggal &amp; Ref</th>
@@ -3463,70 +3463,70 @@ export default function FinanceERPPage() {
 
           {/* ==================== TAB 10: PENERIMAAN BARANG MASUK (GOODS RECEIPT) ==================== */}
           {activeTab === 'goods_receipt' && (
-            <div className="space-y-6">
+            <div className="space-y-6 w-full min-w-0">
               {/* Summary Stats Row */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="p-5 rounded-2xl bg-white border border-[#E3D9CC] shadow-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                <div className="p-4 sm:p-5 rounded-2xl bg-white border border-[#E3D9CC] shadow-xs min-w-0">
                   <div className="flex items-center justify-between text-gray-500 mb-1">
-                    <span className="text-xs font-semibold">Total Dokumen GRN</span>
-                    <Truck className="w-4 h-4 text-cyan-600" />
+                    <span className="text-xs font-semibold truncate">Total Dokumen GRN</span>
+                    <Truck className="w-4 h-4 text-cyan-600 flex-shrink-0" />
                   </div>
                   <div className="text-xl sm:text-2xl font-bold font-mono text-[#111613]">
                     {goodsReceipts.length}
                     <span className="text-xs text-gray-500 font-sans font-normal ml-1">Pengiriman</span>
                   </div>
-                  <p className="text-[11px] text-gray-500 mt-1">Surat jalan pasokan masuk</p>
+                  <p className="text-[11px] text-gray-500 mt-1 truncate">Surat jalan pasokan masuk</p>
                 </div>
 
-                <div className="p-5 rounded-2xl bg-white border border-[#E3D9CC] shadow-xs">
+                <div className="p-4 sm:p-5 rounded-2xl bg-white border border-[#E3D9CC] shadow-xs min-w-0">
                   <div className="flex items-center justify-between text-gray-500 mb-1">
-                    <span className="text-xs font-semibold">Total Berat Tiba</span>
-                    <Box className="w-4 h-4 text-cyan-600" />
+                    <span className="text-xs font-semibold truncate">Total Berat Tiba</span>
+                    <Box className="w-4 h-4 text-cyan-600 flex-shrink-0" />
                   </div>
                   <div className="text-xl sm:text-2xl font-bold font-mono text-cyan-900">
                     {goodsReceipts.reduce((sum, g) => sum + g.totalWeightKg, 0).toLocaleString('id-ID')}
                     <span className="text-xs text-gray-500 font-sans font-normal ml-1">Kg</span>
                   </div>
-                  <p className="text-[11px] text-gray-500 mt-1">Daging &amp; jeroan beku masuk</p>
+                  <p className="text-[11px] text-gray-500 mt-1 truncate">Daging &amp; jeroan beku masuk</p>
                 </div>
 
-                <div className="p-5 rounded-2xl bg-white border border-[#E3D9CC] shadow-xs">
+                <div className="p-4 sm:p-5 rounded-2xl bg-white border border-[#E3D9CC] shadow-xs min-w-0">
                   <div className="flex items-center justify-between text-gray-500 mb-1">
-                    <span className="text-xs font-semibold">Total Kemasan</span>
-                    <PackageCheck className="w-4 h-4 text-emerald-600" />
+                    <span className="text-xs font-semibold truncate">Total Kemasan</span>
+                    <PackageCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
                   </div>
                   <div className="text-xl sm:text-2xl font-bold font-mono text-emerald-900">
                     {goodsReceipts.reduce((sum, g) => sum + g.totalPacks, 0).toLocaleString('id-ID')}
                     <span className="text-xs text-gray-500 font-sans font-normal ml-1">Pack</span>
                   </div>
-                  <p className="text-[11px] text-gray-500 mt-1">Vacuum sealed pack</p>
+                  <p className="text-[11px] text-gray-500 mt-1 truncate">Kemasan vacuum pack</p>
                 </div>
 
-                <div className="p-5 rounded-2xl bg-white border border-[#E3D9CC] shadow-xs">
+                <div className="p-4 sm:p-5 rounded-2xl bg-white border border-[#E3D9CC] shadow-xs min-w-0">
                   <div className="flex items-center justify-between text-gray-500 mb-1">
-                    <span className="text-xs font-semibold">Suhu Rantai Dingin</span>
-                    <Thermometer className="w-4 h-4 text-blue-600" />
+                    <span className="text-xs font-semibold truncate">Suhu Rantai Dingin</span>
+                    <Thermometer className="w-4 h-4 text-blue-600 flex-shrink-0" />
                   </div>
                   <div className="text-xl sm:text-2xl font-bold font-mono text-blue-900">
                     -18.5°C
                   </div>
-                  <p className="text-[11px] text-emerald-600 font-semibold mt-1">✓ Standar Cold Chain Terjaga</p>
+                  <p className="text-[11px] text-emerald-600 font-semibold mt-1 truncate">✓ Cold Chain Terjaga</p>
                 </div>
               </div>
 
               {/* Main Goods Receipt List Card */}
-              <div className="p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-5">
+              <div className="p-5 sm:p-6 rounded-3xl bg-white border border-[#E3D9CC] shadow-sm space-y-5 w-full min-w-0 overflow-hidden">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-4">
                   <div>
                     <h2 className="font-serif-title text-xl font-bold text-[#111613] flex items-center gap-2">
-                      <Truck className="w-5 h-5 text-cyan-600" />
+                      <Truck className="w-5 h-5 text-cyan-600 flex-shrink-0" />
                       <span>Buku Penerimaan Barang Masuk (Goods Receipt Note - GRN)</span>
                     </h2>
                     <p className="text-xs text-gray-500 mt-1">
                       Pencatatan pasokan produk daging beku dari Sentra Produksi Bali atau Supplier RPH ke Hub Gudang Babarsari.
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     <button
                       onClick={handleExportGoodsReceiptCSV}
                       className="px-3 py-1.5 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 font-bold text-xs text-[#111613] flex items-center gap-1.5 transition-colors shadow-xs"
@@ -3609,40 +3609,40 @@ export default function FinanceERPPage() {
                 </div>
 
                 {/* Desktop Table View (hidden md:block) */}
-                <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full text-xs text-left">
+                <div className="hidden md:block overflow-x-auto w-full border border-gray-100 rounded-2xl">
+                  <table className="w-full text-xs text-left min-w-[850px]">
                     <thead className="bg-[#FAF8F5] text-gray-500 font-semibold border-b border-[#EAE4DC]">
                       <tr>
-                        <th className="py-2.5 px-3">No</th>
-                        <th className="py-2.5 px-3">No. Surat Jalan &amp; ID</th>
-                        <th className="py-2.5 px-3">Tanggal Tiba</th>
-                        <th className="py-2.5 px-3">Asal Kiriman</th>
-                        <th className="py-2.5 px-3">Armada &amp; Suhu</th>
-                        <th className="py-2.5 px-3">Penerima Gudang</th>
-                        <th className="py-2.5 px-3 text-right">Kemasan</th>
-                        <th className="py-2.5 px-3 text-right">Total Berat</th>
-                        <th className="py-2.5 px-3">Kondisi &amp; Catatan</th>
+                        <th className="py-2.5 px-3 w-12 text-center">No</th>
+                        <th className="py-2.5 px-3 whitespace-nowrap">No. Surat Jalan &amp; ID</th>
+                        <th className="py-2.5 px-3 whitespace-nowrap">Tanggal Tiba</th>
+                        <th className="py-2.5 px-3 min-w-[200px] max-w-[240px]">Asal Kiriman</th>
+                        <th className="py-2.5 px-3 min-w-[150px]">Armada &amp; Suhu</th>
+                        <th className="py-2.5 px-3 whitespace-nowrap">Penerima Gudang</th>
+                        <th className="py-2.5 px-3 text-right whitespace-nowrap">Kemasan</th>
+                        <th className="py-2.5 px-3 text-right whitespace-nowrap">Total Berat</th>
+                        <th className="py-2.5 px-3 min-w-[160px]">Kondisi &amp; Catatan</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {goodsReceipts.map((gr, idx) => (
                         <tr key={gr.id || idx} className="hover:bg-gray-50/60 transition-colors">
-                          <td className="py-2.5 px-3 text-gray-400 font-mono">{idx + 1}</td>
-                          <td className="py-2.5 px-3">
+                          <td className="py-2.5 px-3 text-gray-400 font-mono text-center">{idx + 1}</td>
+                          <td className="py-2.5 px-3 whitespace-nowrap">
                             <div className="font-mono font-bold text-cyan-950">{gr.deliveryNoteNumber}</div>
                             <div className="text-[11px] text-gray-400 font-mono">{gr.id}</div>
                           </td>
                           <td className="py-2.5 px-3 font-mono text-gray-600 whitespace-nowrap">
                             {gr.receiptDate}
                           </td>
-                          <td className="py-2.5 px-3 max-w-[200px]">
+                          <td className="py-2.5 px-3 min-w-[200px] max-w-[240px]">
                             <div className="font-medium text-[#111613] truncate" title={gr.sourceLabel}>
                               {gr.sourceLabel}
                             </div>
                             <div className="text-[10px] text-gray-400 font-mono">Hub Yogyakarta</div>
                           </td>
-                          <td className="py-2.5 px-3">
-                            <div className="text-gray-700 truncate max-w-[150px]" title={gr.carrierName}>
+                          <td className="py-2.5 px-3 min-w-[150px]">
+                            <div className="text-gray-700 truncate max-w-[160px]" title={gr.carrierName}>
                               {gr.carrierName}
                             </div>
                             <span className="inline-flex items-center gap-1 text-[10px] text-cyan-800 font-mono font-bold">
@@ -3650,13 +3650,13 @@ export default function FinanceERPPage() {
                               {gr.freezerTempCelsius}°C
                             </span>
                           </td>
-                          <td className="py-2.5 px-3 font-medium text-[#111613]">
+                          <td className="py-2.5 px-3 font-medium text-[#111613] whitespace-nowrap">
                             {gr.receiverName}
                           </td>
-                          <td className="py-2.5 px-3 text-right font-mono font-bold text-[#111613]">
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-[#111613] whitespace-nowrap">
                             {gr.totalPacks} Pack
                           </td>
-                          <td className="py-2.5 px-3 text-right font-mono font-bold text-cyan-900">
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-cyan-900 whitespace-nowrap">
                             {gr.totalWeightKg} Kg
                           </td>
                           <td className="py-2.5 px-3 text-gray-600 max-w-xs truncate" title={gr.notes}>
