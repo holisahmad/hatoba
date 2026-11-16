@@ -111,6 +111,7 @@ export async function PATCH(request: Request) {
       paidAmount,
       paymentStatus,
       dueDate,
+      marketingName,
     } = body
 
     // 1. Dedicated Action: Record / Update Payment (POS style: Lunas, DP, Campuran, Tempo)
@@ -158,6 +159,7 @@ export async function PATCH(request: Request) {
         paymentMethod: paymentMethod || undefined,
         paidAmount: typeof paidAmount === 'number' ? paidAmount : undefined,
         dueDate: typeof dueDate === 'string' ? dueDate : undefined,
+        marketingName: typeof marketingName === 'string' ? marketingName : undefined,
       }
     )
 

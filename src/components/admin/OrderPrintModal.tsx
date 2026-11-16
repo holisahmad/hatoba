@@ -522,6 +522,11 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
                   </div>
                   <div className="text-gray-600">Kota / Hub: {order.city} ({order.hubArea})</div>
                   <div className="text-gray-600">No. Kontak: {order.phone}</div>
+                  {order.marketingName && (
+                    <div className="text-[11px] text-[#8C6B24] font-medium pt-0.5">
+                      Promotor / Marketing: <span className="font-bold text-[#111613]">{order.marketingName}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Payment Overview */}
@@ -962,6 +967,11 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
                   <div className="font-medium text-gray-700">{order.businessName || '-'}</div>
                   <div className="text-gray-600">Kota: {order.city} ({order.hubArea})</div>
                   <div className="text-gray-600">Telp/WA: {order.phone}</div>
+                  {order.marketingName && (
+                    <div className="text-[11px] text-[#8C6B24] font-medium pt-0.5">
+                      Promotor: <span className="font-bold text-[#111613]">{order.marketingName}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="p-3.5 rounded-xl bg-emerald-50/60 border border-emerald-200/80 space-y-1">

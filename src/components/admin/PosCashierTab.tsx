@@ -63,6 +63,7 @@ export default function PosCashierTab({
   const [phone, setPhone] = useState('')
   const [hubArea, setHubArea] = useState<'Bali' | 'Yogyakarta'>('Bali')
   const [city, setCity] = useState('Denpasar')
+  const [marketingName, setMarketingName] = useState('')
   const [notes, setNotes] = useState('')
 
   // Payment form
@@ -190,6 +191,7 @@ export default function PosCashierTab({
     setCustomerName('')
     setBusinessName('')
     setPhone('')
+    setMarketingName('')
     setNotes('')
     setPaidAmountInput('')
     setDiscountNominal(0)
@@ -282,6 +284,7 @@ export default function PosCashierTab({
         phone: phone.trim() || '-',
         hubArea,
         city: city.trim() || (hubArea === 'Bali' ? 'Denpasar' : 'Yogyakarta'),
+        marketingName: marketingName.trim() || 'Kasir POS',
         notes: notes.trim() || undefined,
         items: cart.map((c) => ({
           productName: c.productName,
@@ -512,6 +515,19 @@ export default function PosCashierTab({
                   <option value="Yogyakarta">Hub D.I. Yogyakarta</option>
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] text-gray-500 block mb-0.5">
+                Staf Marketing / Promotor: <span className="text-gray-400 font-normal">(Opsional)</span>
+              </label>
+              <input
+                type="text"
+                placeholder="Nama staf sales / promotor (default: Kasir POS)"
+                value={marketingName}
+                onChange={(e) => setMarketingName(e.target.value)}
+                className="w-full px-3 py-1.5 rounded-lg bg-white border border-[#D8CEBE] text-xs focus:outline-none focus:border-[#C59B47]"
+              />
             </div>
           </div>
 

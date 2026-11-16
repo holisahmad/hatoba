@@ -273,6 +273,7 @@ export async function updateAdminOrderStatus(
     paidAmount?: number
     changeAmount?: number
     dueDate?: string
+    marketingName?: string
   }
 ): Promise<AdminOrder | null> {
   const orders = await getAdminOrders()
@@ -284,6 +285,10 @@ export async function updateAdminOrderStatus(
 
   if (options?.dueDate) {
     order.dueDate = options.dueDate
+  }
+
+  if (options?.marketingName !== undefined) {
+    order.marketingName = options.marketingName.trim() || undefined
   }
 
   // Handle stock adjustments if provided

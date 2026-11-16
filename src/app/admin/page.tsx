@@ -121,6 +121,7 @@ export default function AdminPage() {
   const [adjustedItems, setAdjustedItems] = useState<OrderItem[]>([])
   const [adjustmentNoteInput, setAdjustmentNoteInput] = useState('')
   const [adjustmentDueDays, setAdjustmentDueDays] = useState<number>(3)
+  const [adjustmentMarketingInput, setAdjustmentMarketingInput] = useState('')
   const [adjustmentLoading, setAdjustmentLoading] = useState(false)
 
   // Toast notification
@@ -370,6 +371,7 @@ export default function AdminPage() {
     setAdjustingOrder(ord)
     setAdjustedItems(JSON.parse(JSON.stringify(ord.items)))
     setAdjustmentNoteInput(ord.adjustmentNotes || '')
+    setAdjustmentMarketingInput(ord.marketingName || '')
     const base = ord.createdAt ? new Date(ord.createdAt) : new Date()
     let initialDays = 3
     if (ord.dueDate) {
@@ -396,11 +398,13 @@ export default function AdminPage() {
         totalAmount?: number
         adjustmentNotes?: string
         dueDate?: string
+        marketingName?: string
       } = {
         referenceCode: adjustingOrder.referenceCode,
         status: 'VERIFIED',
         adminUser: 'Admin Pusat',
         dueDate: calculatedDueDate,
+        marketingName: adjustmentMarketingInput.trim() || undefined,
       }
 
       if (!acceptAsIs) {
@@ -2161,10 +2165,15 @@ export default function AdminPage() {
               <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                 <div>
                   <span className="font-bold text-sm text-[#111613] block">{adjustingOrder.customerName}</span>
-                  <span className="text-gray-600">
+                  <span className="text-gray-600 block">
                     {adjustingOrder.businessName ? `${adjustingOrder.businessName} · ` : ''}
                     {adjustingOrder.city} ({adjustingOrder.hubArea})
                   </span>
+                  <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold border bg-emerald-50 text-emerald-800 border-emerald-200">
+                      Promotor: {adjustingOrder.marketingName || 'Organik (Web Langsung)'}
+                    </span>
+                  </div>
                   {adjustingOrder.notes && (
                     <div className="mt-1 text-[11px] text-amber-900 bg-amber-50/80 p-1.5 rounded border border-amber-200">
                       <strong>Catatan Konsumen:</strong> {adjustingOrder.notes}
@@ -2439,6 +2448,23 @@ export default function AdminPage() {
                 </div>
                 <p className="text-[10px] text-gray-500">
                   Admin cukup ubah jumlah hari (misal 6 hari), tanggal batas pembayaran otomatis menyesuaikan dan dicetak di Faktur Tagihan.
+                </p>
+              </div>
+
+              {/* Field Promotor Marketing */}
+              <div className="space-y-1">
+                <label className="block text-xs font-bold text-[#111613] uppercase tracking-wider">
+                  Staf Marketing / Promotor: <span className="text-gray-400 font-normal lowercase">(opsional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Nama staf marketing (kosongkan jika order organik)"
+                  value={adjustmentMarketingInput}
+                  onChange={(e) => setAdjustmentMarketingInput(e.target.value)}
+                  className="w-full p-2.5 rounded-xl bg-white border border-[#D8CEBE] text-xs text-[#111613] focus:outline-none focus:ring-2 focus:ring-[#C59B47]/20 focus:border-[#C59B47] shadow-2xs"
+                />
+                <p className="text-[10px] text-gray-500">
+                  Untuk pencatatan performa promotor di dashboard &amp; laporan komisi marketing.
                 </p>
               </div>
             </div>

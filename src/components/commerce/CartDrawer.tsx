@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import {
@@ -36,7 +36,21 @@ export default function CartDrawer() {
   const [phone, setPhone] = useState('')
   const [hubArea, setHubArea] = useState<'Bali' | 'Yogyakarta' | 'Luar Area Layanan'>('Bali')
   const [city, setCity] = useState('')
+  const [marketingName, setMarketingName] = useState('')
   const [notes, setNotes] = useState('')
+
+  // Pre-fill marketing name from attribution tracker if visited via referral / UTM
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const stored = getStoredAttribution()
+      const attr = stored?.lastTouch || stored?.firstTouch
+      if (attr?.referralCode) {
+        setMarketingName(attr.referralCode)
+      } else if (attr?.utmContent) {
+        setMarketingName(attr.utmContent)
+      }
+    }
+  }, [])
 
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
@@ -72,6 +86,7 @@ export default function CartDrawer() {
           phone,
           hubArea,
           city,
+          marketingName: marketingName.trim() || undefined,
           notes,
           items: items.map((i) => ({
             productId: i.productId,
@@ -478,6 +493,24 @@ export default function CartDrawer() {
                       onChange={(e) => setCity(e.target.value)}
                       className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#D8CEBE] text-xs text-[#111613] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#C59B47]/20 focus:border-[#C59B47] transition-all shadow-2xs"
                     />
+                  </div>
+
+                  {/* Field Tim Marketing / Promotor HATOBA (Opsional) */}
+                  <div>
+                    <label className="block text-[11px] font-medium text-[#48564F] mb-1">
+                      Tim Marketing / Promotor HATOBA: <span className="text-gray-400 font-normal">(Opsional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      suppressHydrationWarning
+                      placeholder="Contoh: Bpk. Rizal / Tim Sales (kosongkan jika organik)"
+                      value={marketingName}
+                      onChange={(e) => setMarketingName(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#D8CEBE] text-xs text-[#111613] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#C59B47]/20 focus:border-[#C59B47] transition-all shadow-2xs"
+                    />
+                    <p className="text-[10px] text-gray-500 mt-1">
+                      Tulis nama staf marketing pembawa info untuk pencatatan performa promotor &amp; bonus.
+                    </p>
                   </div>
 
                   {/* Catatan Tambahan */}
