@@ -314,7 +314,7 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
                       Supply &amp; Distribution Trusted
                     </p>
                     <p className="text-xs text-gray-600 font-medium tracking-wide">
-                      Jeroan &amp; Daging Sapi Higienis Standar Cold Chain −18°C
+                      Jeroan &amp; Daging Sapi
                     </p>
                     <p className="text-[11px] text-gray-500">
                       Hub Bali &amp; D.I. Yogyakarta · WA: +62 821-7368-358
@@ -634,7 +634,7 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
                   <div className="text-[10px] font-bold text-[#8C6B24] tracking-wider uppercase">
                     Supply &amp; Distribution Trusted
                   </div>
-                  <div className="text-[10px] text-gray-600">Jeroan &amp; Daging Sapi Higienis −18°C</div>
+                  <div className="text-[10px] text-gray-600">Jeroan &amp; Daging Sapi</div>
                   <div className="text-[10px] text-gray-500">
                     Hub {order.hubArea} · WA: 0821-7368-358
                   </div>
@@ -792,7 +792,7 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
                       Supply &amp; Distribution Trusted
                     </p>
                     <p className="text-xs text-[#5C6E65]">
-                      Penyedia Bahan Baku Jeroan &amp; Daging Sapi Higienis
+                      Jeroan &amp; Daging Sapi
                     </p>
                     <p className="text-[11px] text-gray-500">
                       Hub Operasional: Bali &amp; D.I. Yogyakarta · Telp/WA: 0821-7368-358

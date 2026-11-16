@@ -157,6 +157,7 @@ export async function PATCH(request: Request) {
         paymentStatus: paymentStatus || undefined,
         paymentMethod: paymentMethod || undefined,
         paidAmount: typeof paidAmount === 'number' ? paidAmount : undefined,
+        dueDate: typeof dueDate === 'string' ? dueDate : undefined,
       }
     )
 

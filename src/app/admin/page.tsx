@@ -93,6 +93,7 @@ export default function AdminPage() {
   const [payMethodInput, setPayMethodInput] = useState('Transfer Mandiri')
   const [payAmountInput, setPayAmountInput] = useState('')
   const [payDueDateInput, setPayDueDateInput] = useState('')
+  const [payDueDaysInput, setPayDueDaysInput] = useState<number>(3)
   const [payNotesInput, setPayNotesInput] = useState('')
   const [payLoading, setPayLoading] = useState(false)
 
@@ -119,6 +120,7 @@ export default function AdminPage() {
   const [adjustingOrder, setAdjustingOrder] = useState<AdminOrder | null>(null)
   const [adjustedItems, setAdjustedItems] = useState<OrderItem[]>([])
   const [adjustmentNoteInput, setAdjustmentNoteInput] = useState('')
+  const [adjustmentDueDays, setAdjustmentDueDays] = useState<number>(3)
   const [adjustmentLoading, setAdjustmentLoading] = useState(false)
 
   // Toast notification
@@ -287,12 +289,26 @@ export default function AdminPage() {
         : 'Transfer Mandiri'
     )
     setPayAmountInput(String(ord.paidAmount || ord.totalAmount))
-    setPayDueDateInput(
-      ord.dueDate
-        ? ord.dueDate.slice(0, 10)
-        : new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-    )
+    const base = ord.createdAt ? new Date(ord.createdAt) : new Date()
+    let initialDays = 3
+    if (ord.dueDate) {
+      const diff = Math.round((new Date(ord.dueDate).getTime() - base.getTime()) / (24 * 60 * 60 * 1000))
+      if (diff > 0) initialDays = diff
+    }
+    setPayDueDaysInput(initialDays)
+    const initialDueDate = ord.dueDate
+      ? ord.dueDate.slice(0, 10)
+      : new Date(base.getTime() + initialDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    setPayDueDateInput(initialDueDate)
     setPayNotesInput(ord.statusNotes || '')
+  }
+
+  const handlePayDueDaysChange = (days: number) => {
+    const clamped = Math.max(1, isNaN(days) ? 1 : days)
+    setPayDueDaysInput(clamped)
+    const base = orderToMarkPaid?.createdAt ? new Date(orderToMarkPaid.createdAt) : new Date()
+    const target = new Date(base.getTime() + clamped * 24 * 60 * 60 * 1000)
+    setPayDueDateInput(target.toISOString().slice(0, 10))
   }
 
   // Handle Confirm Update Payment (POS style: Lunas Tunai/Transfer, DP, Campuran, Tempo)
@@ -354,6 +370,13 @@ export default function AdminPage() {
     setAdjustingOrder(ord)
     setAdjustedItems(JSON.parse(JSON.stringify(ord.items)))
     setAdjustmentNoteInput(ord.adjustmentNotes || '')
+    const base = ord.createdAt ? new Date(ord.createdAt) : new Date()
+    let initialDays = 3
+    if (ord.dueDate) {
+      const diff = Math.round((new Date(ord.dueDate).getTime() - base.getTime()) / (24 * 60 * 60 * 1000))
+      if (diff > 0) initialDays = diff
+    }
+    setAdjustmentDueDays(initialDays)
   }
 
   // Handle Save Adjusted Order (Accept As-Is OR Accept with Adjusted Stock)
@@ -362,6 +385,9 @@ export default function AdminPage() {
     setAdjustmentLoading(true)
 
     try {
+      const base = adjustingOrder.createdAt ? new Date(adjustingOrder.createdAt) : new Date()
+      const calculatedDueDate = new Date(base.getTime() + (Number(adjustmentDueDays) || 3) * 24 * 60 * 60 * 1000).toISOString()
+
       const payload: {
         referenceCode: string
         status: OrderStatus
@@ -369,10 +395,12 @@ export default function AdminPage() {
         items?: OrderItem[]
         totalAmount?: number
         adjustmentNotes?: string
+        dueDate?: string
       } = {
         referenceCode: adjustingOrder.referenceCode,
         status: 'VERIFIED',
         adminUser: 'Admin Pusat',
+        dueDate: calculatedDueDate,
       }
 
       if (!acceptAsIs) {
@@ -2347,6 +2375,72 @@ export default function AdminPage() {
                   Catatan ini akan tersimpan di sistem, dicetak pada Faktur Tagihan resmi &amp; Struk Nota kasir (status Tagihan Belum Bayar hingga dilunasi oleh admin), dan <strong>tidak muncul</strong> di Surat Jalan (DO).
                 </p>
               </div>
+
+              {/* Setting Batas Waktu Pembayaran Tagihan (Jumlah Hari) */}
+              <div className="p-3.5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-[#111613] uppercase tracking-wider">
+                    Batas Waktu Pembayaran (Tagihan):
+                  </label>
+                  <span className="text-[10px] text-[#8C6B24] font-bold">
+                    Default 3 Hari
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="number"
+                      min={1}
+                      max={90}
+                      value={adjustmentDueDays}
+                      onChange={(e) => setAdjustmentDueDays(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full p-2.5 rounded-xl bg-white border border-[#D8CEBE] text-xs font-mono font-bold text-[#111613] focus:outline-none focus:ring-2 focus:ring-[#C59B47]/20 focus:border-[#C59B47]"
+                      placeholder="3"
+                    />
+                    <span className="absolute right-3 top-2.5 text-xs text-gray-500 font-medium">Hari</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {[3, 5, 6, 7, 14].map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setAdjustmentDueDays(d)}
+                        className={`px-2.5 py-2 rounded-xl text-xs font-semibold transition-all ${
+                          adjustmentDueDays === d
+                            ? 'bg-[#111613] text-white font-bold'
+                            : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {d}h
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="text-emerald-800 text-[11px] block">
+                      Batas Maksimal Pembayaran Tertera di Tagihan:
+                    </span>
+                    <strong className="text-emerald-950 font-bold font-mono text-xs">
+                      {new Date(
+                        (adjustingOrder?.createdAt ? new Date(adjustingOrder.createdAt).getTime() : Date.now()) +
+                          adjustmentDueDays * 24 * 60 * 60 * 1000
+                      ).toLocaleDateString('id-ID', {
+                        weekday: 'long',
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric',
+                      })}
+                    </strong>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-200/70 text-emerald-900 font-bold">
+                    {adjustmentDueDays} Hari
+                  </span>
+                </div>
+                <p className="text-[10px] text-gray-500">
+                  Admin cukup ubah jumlah hari (misal 6 hari), tanggal batas pembayaran otomatis menyesuaikan dan dicetak di Faktur Tagihan.
+                </p>
+              </div>
             </div>
 
             {/* Footer Modal: Tombol Aksi */}
@@ -3132,18 +3226,72 @@ export default function AdminPage() {
               )}
 
               {/* Batas Waktu Pembayaran (Jatuh Tempo) */}
-              <div className="space-y-1 pt-1">
-                <label className="text-xs font-bold text-gray-700 block">
-                  Batas Waktu Pelunasan / Jatuh Tempo:
-                </label>
-                <input
-                  type="date"
-                  value={payDueDateInput}
-                  onChange={(e) => setPayDueDateInput(e.target.value)}
-                  className="w-full p-2.5 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs font-semibold focus:outline-none focus:border-emerald-600"
-                />
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-gray-700 block">
+                    Batas Waktu Pelunasan / Jatuh Tempo:
+                  </label>
+                  <span className="text-[10px] text-[#8C6B24] font-bold">
+                    Default 3 Hari
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="number"
+                      min={1}
+                      max={90}
+                      value={payDueDaysInput}
+                      onChange={(e) => handlePayDueDaysChange(parseInt(e.target.value) || 1)}
+                      className="w-full p-2.5 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs font-mono font-bold text-[#111613] focus:outline-none focus:border-emerald-600"
+                      placeholder="3"
+                    />
+                    <span className="absolute right-3 top-2.5 text-xs text-gray-500 font-medium">Hari</span>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    {[3, 5, 6, 7, 14, 30].map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => handlePayDueDaysChange(d)}
+                        className={`px-2.5 py-2 rounded-xl text-xs font-semibold transition-all ${
+                          payDueDaysInput === d
+                            ? 'bg-emerald-700 text-white font-bold'
+                            : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {d}h
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Auto-Calculated Date Preview */}
+                <div className="p-2.5 rounded-xl bg-amber-50/80 border border-amber-200/80 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="text-amber-800 font-semibold block text-[11px]">
+                      Tanggal Batas Maksimal Pembayaran:
+                    </span>
+                    <strong className="text-amber-950 font-mono text-xs">
+                      {payDueDateInput
+                        ? new Date(payDueDateInput).toLocaleDateString('id-ID', {
+                            weekday: 'long',
+                            day: 'numeric',
+                            month: 'long',
+                            year: 'numeric',
+                          })
+                        : '-'}
+                    </strong>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-200/60 text-amber-900 font-bold">
+                    {payDueDaysInput} Hari
+                  </span>
+                </div>
+
                 <p className="text-[10px] text-gray-500">
-                  Tanggal ini dicetak pada Invoice &amp; Nota. Jika lewat dan belum lunas, sistem otomatis menandai status <strong>Terlambat</strong> sebagai rekam jejak konsumen.
+                  Admin cukup ubah kolom hari (misal 6 hari), tanggal batas pembayaran otomatis menyesuaikan dan dicetak di Faktur &amp; Nota. Jika lewat tanggal ini dan belum lunas, sistem otomatis menandai status <strong>Terlambat</strong>.
                 </p>
               </div>
 
