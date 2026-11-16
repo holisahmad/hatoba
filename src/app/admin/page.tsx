@@ -1609,9 +1609,10 @@ export default function AdminPage() {
                 </div>
                 {/* Header kolom */}
                 <div className="grid grid-cols-12 gap-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-3">
-                  <div className="col-span-4">Nama Varian</div>
-                  <div className="col-span-2">Berat</div>
-                  <div className="col-span-2">Harga (Rp)</div>
+                  <div className="col-span-3">Nama Varian</div>
+                  <div className="col-span-2">Tipe Kemasan</div>
+                  <div className="col-span-1">Min Qty</div>
+                  <div className="col-span-2">Harga 1-4 pk</div>
                   <div className="col-span-2">H. Coret</div>
                   <div className="col-span-1">Dis%</div>
                   <div className="col-span-1"></div>
@@ -1622,7 +1623,7 @@ export default function AdminPage() {
                       key={v.id || idx}
                       className="p-2 rounded-xl bg-[#FAF8F5] border border-[#EAE4DC] grid grid-cols-12 gap-2 items-center text-xs"
                     >
-                      <div className="col-span-4">
+                      <div className="col-span-3">
                         <input
                           type="text"
                           placeholder="Nama Varian"
@@ -1636,16 +1637,38 @@ export default function AdminPage() {
                         />
                       </div>
                       <div className="col-span-2">
-                        <input
-                          type="text"
-                          placeholder="250 gr"
-                          value={v.weight}
+                        <select
+                          value={v.packType || 'retail'}
                           onChange={(e) => {
                             const newVars = [...(editingProduct.variants || [])]
-                            newVars[idx] = { ...newVars[idx], weight: e.target.value }
+                            newVars[idx] = {
+                              ...newVars[idx],
+                              packType: e.target.value as 'retail' | 'partai',
+                            }
                             setEditingProduct({ ...editingProduct, variants: newVars })
                           }}
                           className="w-full px-2 py-1 rounded-lg bg-white border border-[#D8CEBE] text-xs"
+                        >
+                          <option value="retail">Ritel (1 Pk)</option>
+                          <option value="partai">Partai (B2B)</option>
+                        </select>
+                      </div>
+                      <div className="col-span-1">
+                        <input
+                          type="number"
+                          min="1"
+                          placeholder="1"
+                          value={v.minQty ?? 1}
+                          onChange={(e) => {
+                            const newVars = [...(editingProduct.variants || [])]
+                            newVars[idx] = {
+                              ...newVars[idx],
+                              minQty: Math.max(1, parseInt(e.target.value) || 1),
+                            }
+                            setEditingProduct({ ...editingProduct, variants: newVars })
+                          }}
+                          className="w-full px-2 py-1 rounded-lg bg-white border border-[#D8CEBE] text-xs text-center font-mono font-bold"
+                          title="Minimal order dalam pack (bisa 1 pack)"
                         />
                       </div>
                       <div className="col-span-2">
@@ -1698,6 +1721,7 @@ export default function AdminPage() {
                               setEditingProduct({ ...editingProduct, variants: newVars })
                             }}
                             className="text-red-400 hover:text-red-600 font-bold"
+                            title="Hapus varian"
                           >
                             ✕
                           </button>
@@ -1705,6 +1729,16 @@ export default function AdminPage() {
                       </div>
                     </div>
                   ))}
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-emerald-50/80 border border-emerald-200/70 text-[11px] text-emerald-900 leading-relaxed">
+                  💡 <strong>Ketentuan Harga Partai &amp; Minimal Order:</strong>
+                  <br />
+                  • <strong>Min Qty = 1:</strong> Konsumen dapat membeli mulai dari 1 pack (tidak dikunci minimal 10).
+                  <br />
+                  • <strong>Order 1–4 pack:</strong> Menggunakan harga dasar di kolom atas (contoh Iga Rp 130.000/pk, Babat/Iso Rp 75.000/pk, Paru Rp 80.000/pk).
+                  <br />
+                  • <strong>Order ≥5 pack:</strong> Otomatis mendapat <strong>potongan Rp 10.000 per pack</strong> (Iga menjadi Rp 120.000/pk, Babat/Iso Rp 65.000/pk, Paru Rp 70.000/pk).
                 </div>
               </div>
 
