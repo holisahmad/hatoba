@@ -245,7 +245,7 @@ export default function FinanceERPPage() {
       const res = await fetch('/api/finance/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: pinInput }),
+        body: JSON.stringify({ password: pinInput.trim(), pin: pinInput.trim() }),
       })
       const data = await res.json()
       if (res.ok && data.success) {

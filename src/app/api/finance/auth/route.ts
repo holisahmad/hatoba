@@ -14,7 +14,8 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { password } = await request.json()
+    const body = await request.json()
+    const password = (body.password || body.pin || '').toString().trim()
 
     if (!password || password !== FINANCE_PASSWORD) {
       return NextResponse.json(
