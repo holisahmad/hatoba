@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { getAdminOrders, updateAdminOrderStatus, markOrderAsPaid, recordOrderPayment, addAdminOrder, OrderStatus, AdminOrder } from '@/lib/admin-store'
+import { getAdminOrders, updateAdminOrderStatus, markOrderAsPaid, recordOrderPayment, updateOrderMarketing, addAdminOrder, OrderStatus, AdminOrder } from '@/lib/admin-store'
 import { generateReferenceCode } from '@/lib/whatsapp'
 
 async function checkAuth(): Promise<boolean> {
@@ -136,6 +136,25 @@ export async function PATCH(request: Request) {
       }
 
       return NextResponse.json({ success: true, order: updatedPaymentOrder })
+    }
+
+    // 2. Dedicated Action: Update Marketing Name (Internal Only)
+    if (action === 'UPDATE_MARKETING') {
+      if (!referenceCode) {
+        return NextResponse.json({ error: 'Kode referensi pesanan wajib diisi.' }, { status: 400 })
+      }
+
+      const updatedMarketingOrder = await updateOrderMarketing(
+        referenceCode,
+        typeof marketingName === 'string' ? marketingName : undefined,
+        adminUser || 'Admin'
+      )
+
+      if (!updatedMarketingOrder) {
+        return NextResponse.json({ error: 'Pesanan tidak ditemukan.' }, { status: 404 })
+      }
+
+      return NextResponse.json({ success: true, order: updatedMarketingOrder })
     }
 
     // 2. Standard Status or Stock Adjustment Update

@@ -41,6 +41,7 @@ import {
   Send,
   CreditCard,
   Check,
+  X,
 } from 'lucide-react'
 import { AdminOrder, AdminProduct, ActivityLog, OrderStatus, OrderItem } from '@/lib/admin-store'
 import OrderPrintModal from '@/components/admin/OrderPrintModal'
@@ -123,6 +124,11 @@ export default function AdminPage() {
   const [adjustmentDueDays, setAdjustmentDueDays] = useState<number>(3)
   const [adjustmentMarketingInput, setAdjustmentMarketingInput] = useState('')
   const [adjustmentLoading, setAdjustmentLoading] = useState(false)
+
+  // Quick Marketing Assignment Modal (Internal Only)
+  const [editingMarketingOrder, setEditingMarketingOrder] = useState<AdminOrder | null>(null)
+  const [quickMarketingInput, setQuickMarketingInput] = useState('')
+  const [marketingSaving, setMarketingSaving] = useState(false)
 
   // Toast notification
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
@@ -363,6 +369,57 @@ export default function AdminPage() {
       showToast('Terjadi kesalahan jaringan saat memproses pembayaran.', 'error')
     } finally {
       setPayLoading(false)
+    }
+  }
+
+  // Handle Quick Marketing Assignment (Internal Tracking)
+  const openQuickMarketingModal = (ord: AdminOrder) => {
+    setEditingMarketingOrder(ord)
+    setQuickMarketingInput(ord.marketingName || '')
+  }
+
+  const handleSaveQuickMarketing = async () => {
+    if (!editingMarketingOrder) return
+    setMarketingSaving(true)
+    try {
+      const res = await fetch('/api/admin/orders', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'UPDATE_MARKETING',
+          referenceCode: editingMarketingOrder.referenceCode,
+          marketingName: quickMarketingInput.trim() || undefined,
+          adminUser: 'Admin Pusat',
+        }),
+      })
+
+      const data = await res.json()
+      if (res.ok && data.success && data.order) {
+        setOrders((prev) =>
+          prev.map((o) => (o.referenceCode === editingMarketingOrder.referenceCode ? data.order : o))
+        )
+        if (selectedOrderForPrint?.referenceCode === editingMarketingOrder.referenceCode) {
+          setSelectedOrderForPrint(data.order)
+        }
+        setEditingMarketingOrder(null)
+        showToast(
+          quickMarketingInput.trim()
+            ? `Staf marketing pesanan ${editingMarketingOrder.referenceCode} berhasil diperbarui: "${quickMarketingInput.trim()}".`
+            : `Pesanan ${editingMarketingOrder.referenceCode} diset sebagai Organik (tanpa promotor).`,
+          'success'
+        )
+        const logsRes = await fetch('/api/admin/logs')
+        if (logsRes.ok) {
+          const logsData = await logsRes.json()
+          if (logsData.logs) setLogs(logsData.logs)
+        }
+      } else {
+        showToast(data.error || 'Gagal memperbarui data promotor marketing.', 'error')
+      }
+    } catch {
+      showToast('Terjadi kesalahan jaringan saat menyimpan data marketing.', 'error')
+    } finally {
+      setMarketingSaving(false)
     }
   }
 
@@ -1368,9 +1425,25 @@ export default function AdminPage() {
 
                           {/* Marketing & Hub */}
                           <td className="py-4 px-4 align-top">
-                            <span className="px-2.5 py-1 rounded-full text-[10px] bg-[#FAF6F0] text-[#8C6B24] border border-[#E8DFD5] font-semibold block w-fit mb-1">
-                              Promotor: {ord.marketingName || '-'}
-                            </span>
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                  ord.marketingName
+                                    ? 'bg-[#FAF6F0] text-[#8C6B24] border-[#E8DFD5]'
+                                    : 'bg-gray-100 text-gray-500 border-gray-200'
+                                }`}
+                              >
+                                Promotor: {ord.marketingName || 'Organik'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => openQuickMarketingModal(ord)}
+                                title="Input / Edit Tim Marketing (Internal)"
+                                className="p-1 rounded hover:bg-amber-100/70 text-gray-400 hover:text-[#8C6B24] transition-colors"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                            </div>
                             <span className="text-[11px] text-gray-500 block">Hub: {ord.hubArea}</span>
                           </td>
 
@@ -3545,6 +3618,70 @@ export default function AdminPage() {
               >
                 <Send className="w-3.5 h-3.5" />
                 <span>Buka &amp; Kirim via WhatsApp</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Quick Edit Tim Marketing (Internal Perusahaan Only) */}
+      {editingMarketingOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-[#E8DFD5] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 bg-[#FAF8F5] border-b border-[#EAE4DC] flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-sm text-[#111613]">Input / Edit Tim Marketing</h3>
+                <p className="text-[11px] text-gray-500">
+                  Pesanan: <span className="font-mono font-semibold text-[#8C6B24]">{editingMarketingOrder.referenceCode}</span> ({editingMarketingOrder.customerName})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingMarketingOrder(null)}
+                className="p-1 rounded-lg hover:bg-gray-200 text-gray-500 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-[#111613] uppercase tracking-wider">
+                  Nama Staf Marketing / Promotor:
+                </label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Rian Wijaya, Siti Rahma (kosongkan jika Organik)"
+                  value={quickMarketingInput}
+                  onChange={(e) => setQuickMarketingInput(e.target.value)}
+                  className="w-full p-2.5 rounded-xl bg-white border border-[#D8CEBE] text-xs text-[#111613] focus:outline-none focus:ring-2 focus:ring-[#C59B47]/20 focus:border-[#C59B47] shadow-2xs"
+                  autoFocus
+                />
+                <p className="text-[11px] text-gray-500 leading-relaxed">
+                  Gunakan jika kasir atau konsumen lupa menginput nama tim marketing saat order, agar omset dan komisi masuk ke dashboard performa.
+                </p>
+                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 leading-tight">
+                  🔒 <strong>Internal Perusahaan:</strong> Data tim marketing hanya tampil di dashboard admin dan <strong>TIDAK akan dicetak</strong> pada invoice tagihan, nota kasir, maupun surat jalan konsumen.
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-3.5 bg-[#FAF8F5] border-t border-[#EAE4DC] flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingMarketingOrder(null)}
+                disabled={marketingSaving}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-200 transition-colors"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveQuickMarketing}
+                disabled={marketingSaving}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-sm disabled:opacity-60"
+              >
+                {marketingSaving ? 'Menyimpan...' : 'Simpan Marketing'}
               </button>
             </div>
           </div>

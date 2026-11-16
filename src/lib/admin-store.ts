@@ -61,6 +61,7 @@ export interface ActivityLog {
     | 'ADMIN_LOGIN'
     | 'POS_TRANSACTION'
     | 'PAYMENT_RECEIVED'
+    | 'SETTINGS_UPDATE'
   title: string
   description: string
   adminUser: string
@@ -516,6 +517,48 @@ export async function markOrderAsPaid(
     adminUser: options?.adminUser,
     notes: options?.notes,
   })
+}
+
+export async function updateOrderMarketing(
+  referenceCodeOrId: string,
+  marketingName: string | undefined,
+  adminUser = 'Admin'
+): Promise<AdminOrder | null> {
+  const orders = await getAdminOrders()
+  const order = orders.find((o) => o.id === referenceCodeOrId || o.referenceCode === referenceCodeOrId)
+  if (!order) return null
+
+  const prevMarketing = order.marketingName || 'Organik'
+  order.marketingName = marketingName ? marketingName.trim() : undefined
+
+  try {
+    const { error } = await supabase
+      .from('hatoba_orders')
+      .update({
+        data: order,
+      })
+      .eq('id', order.id)
+
+    if (error) {
+      console.warn('[admin-store] Supabase updateOrderMarketing error:', error.message)
+    }
+  } catch (err) {
+    console.warn('[admin-store] Supabase updateOrderMarketing exception:', (err as Error).message)
+  }
+
+  await recordActivityLog({
+    action: 'SETTINGS_UPDATE',
+    title: 'Update Tim Marketing Pesanan',
+    description: `Pesanan ${order.referenceCode} (${order.customerName}) staf promotor diubah dari "${prevMarketing}" menjadi "${order.marketingName || 'Organik / Tanpa Marketing'}"`,
+    adminUser,
+    metadata: {
+      referenceCode: order.referenceCode,
+      prevMarketing,
+      newMarketing: order.marketingName || 'Organik',
+    },
+  })
+
+  return order
 }
 
 // ==================== PRODUCTS / MENU STORE (SUPABASE + CACHE) ====================
