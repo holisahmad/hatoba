@@ -729,24 +729,20 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
                 </div>
               </div>
 
-              {/* TABEL CHECKLIST BARANG (PETUGAS / DRIVER / KONSUMEN) */}
+              {/* TABEL CHECKLIST BARANG (HANYA 1 CEK LIST: PENERIMAAN KONSUMEN) */}
               <div>
                 <table className="w-full text-xs border border-gray-400 border-collapse print:border-black">
                   <thead>
                     <tr className="bg-gray-100 print:bg-gray-200 text-gray-900 font-bold border-b border-gray-400">
                       <th className="border border-gray-400 p-2 text-center w-8">No</th>
                       <th className="border border-gray-400 p-2 text-left">Nama Produk &amp; Spesifikasi</th>
-                      <th className="border border-gray-400 p-2 text-left w-32">Varian / Kemasan</th>
+                      <th className="border border-gray-400 p-2 text-left w-36">Varian / Kemasan</th>
                       <th className="border border-gray-400 p-2 text-center w-24">Jumlah Order</th>
-                      <th className="border border-gray-400 p-2 text-center w-28 bg-blue-50/60 print:bg-white">
-                        <div>Cek Petugas/Kurir</div>
-                        <div className="text-[9px] font-normal text-gray-500 print:text-black">(Muat Armada)</div>
+                      <th className="border border-gray-400 p-2 text-center w-28">Kondisi Fisik</th>
+                      <th className="border border-gray-400 p-2 text-center w-40 bg-emerald-50/70 print:bg-white">
+                        <div className="text-[11px] font-bold text-emerald-950 print:text-black">Cek List Penerimaan</div>
+                        <div className="text-[9px] font-normal text-gray-600 print:text-black">(Kesesuaian Barang)</div>
                       </th>
-                      <th className="border border-gray-400 p-2 text-center w-32 bg-emerald-50/60 print:bg-white">
-                        <div>Cek Konsumen</div>
-                        <div className="text-[9px] font-normal text-gray-500 print:text-black">(Diterima Fisik)</div>
-                      </th>
-                      <th className="border border-gray-400 p-2 text-center w-28">Kondisi Segel/Suhu</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -760,27 +756,14 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
                         <td className="border border-gray-400 p-2 text-center font-mono font-bold text-sm">
                           {it.quantity} pack
                         </td>
-                        {/* KOTAK CHECKLIST PETUGAS / KURIR */}
-                        <td className="border border-gray-400 p-2 text-center bg-blue-50/20 print:bg-white">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <span className="w-5 h-5 rounded border-2 border-gray-600 print:border-black inline-block bg-white flex-shrink-0" />
-                            <span className="text-[10px] text-gray-700 print:text-black font-medium">Sesuai</span>
-                          </div>
+                        <td className="border border-gray-400 p-2 text-center text-[10px] text-emerald-800 font-semibold print:text-black">
+                          ✓ Beku −18°C Segel
                         </td>
-                        {/* KOTAK CHECKLIST KONSUMEN / RESTO */}
-                        <td className="border border-gray-400 p-2 text-center bg-emerald-50/20 print:bg-white">
-                          <div className="flex items-center justify-center gap-1.5">
+                        {/* HANYA 1 KOTAK CHECKLIST: PENERIMAAN KONSUMEN */}
+                        <td className="border border-gray-400 p-2 text-center bg-emerald-50/25 print:bg-white">
+                          <div className="flex items-center justify-center gap-2">
                             <span className="w-5 h-5 rounded border-2 border-gray-700 print:border-black inline-block bg-white flex-shrink-0" />
-                            <span className="text-[10px] text-gray-800 print:text-black font-medium">Lengkap</span>
-                          </div>
-                        </td>
-                        {/* STATUS KONDISI FISIK / SUHU */}
-                        <td className="border border-gray-400 p-2 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <span className="w-4 h-4 rounded border border-gray-500 print:border-black inline-block bg-white flex-shrink-0" />
-                            <span className="text-[10px] font-semibold text-emerald-800 print:text-black">
-                              −18°C Beku
-                            </span>
+                            <span className="text-[11px] text-gray-800 print:text-black font-semibold">Sesuai</span>
                           </div>
                         </td>
                       </tr>
@@ -789,41 +772,41 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
                   <tfoot>
                     <tr className="bg-gray-50 print:bg-gray-100 font-bold border-t-2 border-gray-400">
                       <td colSpan={3} className="border border-gray-400 p-2 text-right">
-                        Total Kuantitas Muatan:
+                        Total Kuantitas Kirim:
                       </td>
                       <td className="border border-gray-400 p-2 text-center font-mono text-sm text-[#8C6B24] print:text-black">
                         {order.items.reduce((acc, it) => acc + it.quantity, 0)} pack
                       </td>
-                      <td colSpan={3} className="border border-gray-400 p-2 text-[10px] text-gray-600 print:text-black">
-                        * Centang [ ✔ ] pada kotak setiap pack yang sudah diperiksa fisik
+                      <td colSpan={2} className="border border-gray-400 p-2 text-[10px] text-gray-600 print:text-black">
+                        * Konsumen memberi tanda centang [ ✔ ] pada kotak untuk memastikan barang fisik telah sesuai
                       </td>
                     </tr>
                   </tfoot>
                 </table>
               </div>
 
-              {/* BOX PANDUAN CEK LIST SAAT SERAH TERIMA */}
+              {/* BOX PANDUAN CEK LIST PENERIMAAN KONSUMEN */}
               <div className="p-3 rounded-xl bg-[#FAF8F5] border border-gray-300 text-xs space-y-1.5 print:bg-white print:border-black">
                 <div className="font-bold text-[#111613] text-[11px] uppercase tracking-wider flex items-center gap-1.5">
                   <CheckSquare className="w-3.5 h-3.5 text-[#8C6B24]" />
-                  <span>Petunjuk Cek List Serah Terima Barang (Kurir &amp; Konsumen):</span>
+                  <span>Pemeriksaan Kesesuaian Barang oleh Konsumen / Penerima:</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-gray-700 print:text-black pt-0.5">
                   <div className="flex items-start gap-1.5">
                     <span className="w-4 h-4 rounded border border-gray-600 inline-block flex-shrink-0 mt-0.5 bg-white" />
-                    <span>1. Kemasan vacuum sealed rapat, tidak ada kebocoran/sobek</span>
+                    <span>1. Jenis produk &amp; varian sesuai order</span>
                   </div>
                   <div className="flex items-start gap-1.5">
                     <span className="w-4 h-4 rounded border border-gray-600 inline-block flex-shrink-0 mt-0.5 bg-white" />
-                    <span>2. Produk kondisi beku keras (Suhu Cold Chain −18°C terjaga)</span>
+                    <span>2. Jumlah pack fisik lengkap sesuai surat jalan</span>
                   </div>
                   <div className="flex items-start gap-1.5">
                     <span className="w-4 h-4 rounded border border-gray-600 inline-block flex-shrink-0 mt-0.5 bg-white" />
-                    <span>3. Jumlah fisik pack cocok dengan pesanan tercetak</span>
+                    <span>3. Kemasan vacuum utuh &amp; beku keras (−18°C)</span>
                   </div>
                 </div>
                 <div className="text-[10px] text-gray-500 print:text-black pt-1 border-t border-gray-200">
-                  <span className="font-semibold text-gray-700 print:text-black">Catatan Selisih / Kondisi Fisik Lapangan:</span>{' '}
+                  <span className="font-semibold text-gray-700 print:text-black">Catatan Konsumen / Selisih Fisik:</span>{' '}
                   <span className="italic text-gray-400">...........................................................................................................................................................</span>
                 </div>
               </div>
