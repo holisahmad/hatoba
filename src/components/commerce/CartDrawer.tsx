@@ -260,9 +260,23 @@ export default function CartDrawer() {
                               <ArrowUpRight className="w-2.5 h-2.5" />
                             </Link>
                           </div>
-                          <p className="text-[11px] text-[#5C6E65] mt-0.5">
-                            {formatRupiah(item.price)} / pack
-                          </p>
+
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            <p className="text-[11px] text-[#5C6E65]">
+                              {formatRupiah(item.price)} / pack
+                            </p>
+                            {(item.packType === 'partai' || item.variantId.includes('partai')) && (
+                              item.quantity >= 5 ? (
+                                <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
+                                  Diskon Rp 10.000/pk (≥5 pk)
+                                </span>
+                              ) : (
+                                <span className="text-[9px] bg-amber-50 text-amber-700 font-medium px-1.5 py-0.5 rounded border border-amber-200">
+                                  + {5 - item.quantity} pk lagi untuk diskon Rp 10rb/pk
+                                </span>
+                              )
+                            )}
+                          </div>
 
                           <div className="flex items-center justify-between mt-3">
                             <div className="flex items-center gap-2 bg-white rounded-lg p-1 border border-[#D8CEBE]">

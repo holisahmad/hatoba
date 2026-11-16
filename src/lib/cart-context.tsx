@@ -9,6 +9,8 @@ export interface CartItem {
   variantName: string
   weight: string
   price: number
+  basePrice?: number
+  packType?: 'retail' | 'partai'
   quantity: number
   packagingImage: string
   minQty: number
@@ -59,10 +61,32 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       )
       if (index > -1) {
         const updated = [...prev]
-        updated[index].quantity += newItem.quantity
+        const curr = updated[index]
+        const newQty = curr.quantity + newItem.quantity
+        const basePrice = curr.basePrice || newItem.basePrice || curr.price
+        const isPartai = curr.packType === 'partai' || newItem.packType === 'partai' || curr.variantId.includes('partai')
+        const effectivePrice = isPartai && newQty >= 5 ? Math.max(0, basePrice - 10000) : basePrice
+        updated[index] = {
+          ...curr,
+          quantity: newQty,
+          basePrice,
+          price: effectivePrice,
+        }
         return updated
       }
-      return [...prev, newItem]
+
+      const basePrice = newItem.basePrice || newItem.price
+      const isPartai = newItem.packType === 'partai' || newItem.variantId.includes('partai')
+      const effectivePrice = isPartai && newItem.quantity >= 5 ? Math.max(0, basePrice - 10000) : basePrice
+
+      return [
+        ...prev,
+        {
+          ...newItem,
+          basePrice,
+          price: effectivePrice,
+        },
+      ]
     })
     setIsCartOpen(true)
   }
@@ -81,7 +105,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setItems((prev) =>
       prev.map((i) => {
         if (i.productId === productId && i.variantId === variantId) {
-          return { ...i, quantity: qty }
+          const isPartai = i.packType === 'partai' || i.variantId.includes('partai')
+          const basePrice = i.basePrice || i.price
+          const effectivePrice = isPartai && qty >= 5 ? Math.max(0, basePrice - 10000) : basePrice
+          return {
+            ...i,
+            quantity: qty,
+            basePrice,
+            price: effectivePrice,
+          }
         }
         return i
       })
@@ -91,7 +123,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const clearCart = () => setItems([])
 
   const totalCount = items.reduce((acc, item) => acc + item.quantity, 0)
-  const totalAmount = items.reduce((acc, item) => acc + item.price * item.quantity, 0)
+  const totalAmount = items.reduce((acc, item) => {
+    const isPartai = item.packType === 'partai' || item.variantId.includes('partai')
+    const basePrice = item.basePrice || item.price
+    const effectivePrice = isPartai && item.quantity >= 5 ? Math.max(0, basePrice - 10000) : item.price
+    return acc + effectivePrice * item.quantity
+  }, 0)
 
   return (
     <CartContext.Provider

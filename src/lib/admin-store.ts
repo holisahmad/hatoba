@@ -47,7 +47,16 @@ export interface AdminProduct extends ProductItem {
 export interface ActivityLog {
   id: string
   timestamp: string
-  action: 'ORDER_VERIFIED' | 'ORDER_REJECTED' | 'ORDER_PENDING' | 'MENU_CREATED' | 'MENU_UPDATED' | 'MENU_DELETED' | 'ORDER_RECEIVED' | 'ADMIN_LOGIN'
+  action:
+    | 'ORDER_VERIFIED'
+    | 'ORDER_REJECTED'
+    | 'ORDER_PENDING'
+    | 'MENU_CREATED'
+    | 'MENU_UPDATED'
+    | 'MENU_DELETED'
+    | 'ORDER_RECEIVED'
+    | 'ADMIN_LOGIN'
+    | 'POS_TRANSACTION'
   title: string
   description: string
   adminUser: string
@@ -61,6 +70,37 @@ let cachedLogs: ActivityLog[] | null = null
 
 // Initial Fallback Orders
 const INITIAL_ORDERS: AdminOrder[] = [
+  {
+    id: 'ord-pos-sample',
+    referenceCode: 'POS-2611-P108',
+    createdAt: new Date(Date.now() - 3600000 * 1).toISOString(),
+    customerName: 'Ibu H. Siti Aminah',
+    businessName: 'Warung Nasi Campur Bali',
+    businessType: 'Restoran / Rumah Makan',
+    phone: '081398765432',
+    hubArea: 'Bali',
+    city: 'Denpasar',
+    marketingName: 'Kasir POS',
+    notes: 'Order Kasir Langsung',
+    items: [
+      {
+        productName: 'Mix 4 Lauk (Iga · Paru · Babat · Iso)',
+        variantName: 'Kemasan Ecer (1 pack · 3 porsi)',
+        quantity: 2,
+        unitPrice: 72500,
+        subtotal: 145000,
+      },
+    ],
+    totalAmount: 145000,
+    paidAmount: 145000,
+    changeAmount: 0,
+    paymentMethod: 'Tunai',
+    paymentStatus: 'LUNAS',
+    source: 'POS',
+    status: 'VERIFIED',
+    verifiedAt: new Date(Date.now() - 3600000 * 1).toISOString(),
+    statusNotes: 'Dibuat via Kasir POS (Tunai) — Lunas Rp 145.000',
+  },
   {
     id: 'ord-init-01',
     referenceCode: 'ORD-2611-B892',
@@ -120,6 +160,27 @@ const INITIAL_ORDERS: AdminOrder[] = [
   },
 ]
 
+const INITIAL_LOGS: ActivityLog[] = [
+  {
+    id: 'log-init-01',
+    action: 'POS_TRANSACTION',
+    title: 'Transaksi Kasir POS',
+    description: 'Transaksi Kasir POS-2611-P108 dari Ibu H. Siti Aminah senilai Rp 145.000 (Tunai)',
+    adminUser: 'Kasir POS',
+    timestamp: new Date(Date.now() - 3600000 * 1).toISOString(),
+    metadata: { referenceCode: 'POS-2611-P108', totalAmount: 145000 },
+  },
+  {
+    id: 'log-init-02',
+    action: 'ORDER_RECEIVED',
+    title: 'Order Baru Masuk',
+    description: 'Pesanan ORD-2611-Y415 dari Ibu Ratna Dewi (Sleman) senilai Rp 1.300.000',
+    adminUser: 'Sistem Web',
+    timestamp: new Date(Date.now() - 3600000 * 2).toISOString(),
+    metadata: { referenceCode: 'ORD-2611-Y415', totalAmount: 1300000 },
+  },
+]
+
 // ==================== ORDERS STORE (SUPABASE + CACHE) ====================
 export async function getAdminOrders(): Promise<AdminOrder[]> {
   try {
@@ -174,16 +235,20 @@ export async function addAdminOrder(
   }
 
   // Update in-memory cache
-  if (cachedOrders) {
-    cachedOrders.unshift(newOrder)
+  if (!cachedOrders) {
+    cachedOrders = [...INITIAL_ORDERS]
   }
+  cachedOrders.unshift(newOrder)
 
   // Record activity log
+  const isPos = newOrder.source === 'POS' || newOrder.referenceCode.includes('POS')
   await recordActivityLog({
-    action: 'ORDER_RECEIVED',
-    title: 'Order Baru Masuk',
-    description: `Pesanan ${newOrder.referenceCode} dari ${newOrder.customerName} (${newOrder.city}) senilai Rp ${newOrder.totalAmount.toLocaleString('id-ID')}`,
-    adminUser: 'Sistem Web',
+    action: isPos ? 'POS_TRANSACTION' : 'ORDER_RECEIVED',
+    title: isPos ? 'Transaksi Kasir POS' : 'Order Baru Masuk',
+    description: isPos
+      ? `Transaksi Kasir ${newOrder.referenceCode} (${newOrder.customerName} · ${newOrder.city}) senilai Rp ${newOrder.totalAmount.toLocaleString('id-ID')} via ${newOrder.paymentMethod || 'Tunai'}`
+      : `Pesanan ${newOrder.referenceCode} dari ${newOrder.customerName} (${newOrder.city}) senilai Rp ${newOrder.totalAmount.toLocaleString('id-ID')}`,
+    adminUser: isPos ? 'Kasir POS' : 'Sistem Web',
     metadata: { referenceCode: newOrder.referenceCode, totalAmount: newOrder.totalAmount },
   })
 
@@ -415,7 +480,7 @@ export async function getActivityLogs(): Promise<ActivityLog[]> {
 
     if (error) {
       console.warn('[admin-store] Supabase get logs error:', error.message)
-      return cachedLogs || []
+      return cachedLogs || INITIAL_LOGS
     }
 
     if (data && data.length > 0) {
@@ -424,10 +489,10 @@ export async function getActivityLogs(): Promise<ActivityLog[]> {
       return logs
     }
 
-    return cachedLogs || []
+    return cachedLogs || INITIAL_LOGS
   } catch (err) {
     console.warn('[admin-store] get logs exception:', (err as Error).message)
-    return cachedLogs || []
+    return cachedLogs || INITIAL_LOGS
   }
 }
 
@@ -452,9 +517,10 @@ export async function recordActivityLog(logData: Omit<ActivityLog, 'id' | 'times
     console.warn('[admin-store] Supabase insert log exception:', (err as Error).message)
   }
 
-  if (cachedLogs) {
-    cachedLogs.unshift(newLog)
+  if (!cachedLogs) {
+    cachedLogs = [...INITIAL_LOGS]
   }
+  cachedLogs.unshift(newLog)
 
   return newLog
 }

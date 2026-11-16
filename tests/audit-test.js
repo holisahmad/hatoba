@@ -111,25 +111,40 @@ test('=== [WHITEBOX] 1. Catalog & Product Data Integrity ===', async (t) => {
       const p = CATALOG_PRODUCTS.find((p) => p.id === id)
       return p.variants.find((v) => v.packType === type)
     }
-    // Babat Sapi 240g — 45k / 65k
+    // Babat Sapi 240g — 45k retail / 75k partai (min 1 pack, diskon 10k mulai 5 pack)
     assert.strictEqual(getV('babat-sapi', 'retail').price, 45000)
     assert.strictEqual(getV('babat-sapi', 'retail').weight, '240 gr')
-    assert.strictEqual(getV('babat-sapi', 'partai').price, 65000)
-    assert.strictEqual(getV('babat-sapi', 'partai').minQty, 10)
-    // Iso Sapi 240g — 43.5k / 65k
+    assert.strictEqual(getV('babat-sapi', 'partai').price, 75000)
+    assert.strictEqual(getV('babat-sapi', 'partai').minQty, 1)
+    // Iso Sapi 240g — 43.5k / 75k
     assert.strictEqual(getV('iso-sapi', 'retail').price, 43500)
-    assert.strictEqual(getV('iso-sapi', 'partai').price, 65000)
-    // Paru Sapi 300g — 49.5k / 70k
+    assert.strictEqual(getV('iso-sapi', 'partai').price, 75000)
+    assert.strictEqual(getV('iso-sapi', 'partai').minQty, 1)
+    // Paru Sapi 300g — 49.5k / 80k
     assert.strictEqual(getV('paru-sapi', 'retail').price, 49500)
     assert.strictEqual(getV('paru-sapi', 'retail').weight, '300 gr')
-    assert.strictEqual(getV('paru-sapi', 'partai').price, 70000)
-    // Iga Sapi 500g — 82.5k / 120k
+    assert.strictEqual(getV('paru-sapi', 'partai').price, 80000)
+    assert.strictEqual(getV('paru-sapi', 'partai').minQty, 1)
+    // Iga Sapi 500g — 82.5k / 130k (1-4 pack), 120k (≥5 pack)
     assert.strictEqual(getV('iga-sapi', 'retail').price, 82500)
     assert.strictEqual(getV('iga-sapi', 'retail').weight, '500 gr')
-    assert.strictEqual(getV('iga-sapi', 'partai').price, 120000)
+    assert.strictEqual(getV('iga-sapi', 'partai').price, 130000)
+    assert.strictEqual(getV('iga-sapi', 'partai').minQty, 1)
     // Mix 4 Lauk — 72.5k, NO PARTAI
     assert.strictEqual(getV('mix-4-lauk', 'retail').price, 72500)
     assert.strictEqual(getV('mix-4-lauk', 'partai'), undefined)
+  })
+
+  await t.test('Partai tier pricing calculation: 1-4 pack base price (+10k), ≥5 pack diskon 10k', () => {
+    const computeEffectivePrice = (basePrice, qty) => (qty >= 5 ? basePrice - 10000 : basePrice)
+    // Example from user: Iga 1 pack 130.000, 5 pack turun 120.000
+    assert.strictEqual(computeEffectivePrice(130000, 1), 130000)
+    assert.strictEqual(computeEffectivePrice(130000, 4), 130000)
+    assert.strictEqual(computeEffectivePrice(130000, 5), 120000)
+    assert.strictEqual(computeEffectivePrice(130000, 10), 120000)
+    // Babat partai: 75.000 (1-4 pack), 65.000 (≥5 pack)
+    assert.strictEqual(computeEffectivePrice(75000, 1), 75000)
+    assert.strictEqual(computeEffectivePrice(75000, 5), 65000)
   })
 
   await t.test('All 9 verified partner clients exist with required attributes', () => {
@@ -331,7 +346,16 @@ test('=== [WHITEBOX] 4. Cart Calculation Accuracy ===', async (t) => {
     assert.strictEqual(computeCart(items), 72500 + 90000 + 49500) // 212000
   })
 
-  await t.test('Partai multi-qty cart total (15 pack Babat @65k)', () => {
+  await t.test('Partai order 2 pack Iga (no discount) → 2 x 130k = 260k', () => {
+    const computeTierItem = (basePrice, qty, isPartai) => {
+      const unit = isPartai && qty >= 5 ? basePrice - 10000 : basePrice
+      return unit * qty
+    }
+    assert.strictEqual(computeTierItem(130000, 2, true), 260000)
+    assert.strictEqual(computeTierItem(130000, 5, true), 600000) // 5 x 120k
+  })
+
+  await t.test('Partai multi-qty cart total (15 pack Babat @65k discounted)', () => {
     const items = [{ qty: 15, price: 65000 }]
     assert.strictEqual(computeCart(items), 975000)
   })
@@ -546,14 +570,19 @@ test('=== [BLACKBOX] 7. Input Validation & Edge Case Rejection ===', async (t) =
     assert.match(r.error, /tidak valid/)
   })
 
-  await t.test('Partai quantity below minimum (3 of min 10) → rejected', () => {
-    const r = validateOrderPayload({ order: { customerName: 'Budi', phone: '08123', items: [{ productId: 'babat-sapi', variantId: 'babat-partai', quantity: 3 }] } })
-    assert.strictEqual(r.ok, false)
-    assert.match(r.error, /minimal 10 pack/)
+  await t.test('Partai quantity 1 pack (can order 1 pack, not locked to 10) → accepted', () => {
+    const r = validateOrderPayload({ order: { customerName: 'Budi', phone: '08123', items: [{ productId: 'babat-sapi', variantId: 'babat-partai', quantity: 1 }] } })
+    assert.strictEqual(r.ok, true)
   })
 
-  await t.test('Partai quantity exactly at minimum (10) → accepted', () => {
-    assert.strictEqual(validateOrderPayload({ order: { customerName: 'Budi', phone: '08123', items: [{ productId: 'babat-sapi', variantId: 'babat-partai', quantity: 10 }] } }).ok, true)
+  await t.test('Partai quantity 0 pack → rejected below minQty', () => {
+    const r = validateOrderPayload({ order: { customerName: 'Budi', phone: '08123', items: [{ productId: 'babat-sapi', variantId: 'babat-partai', quantity: 0 }] } })
+    assert.strictEqual(r.ok, false)
+    assert.match(r.error, /minimal 1 pack/)
+  })
+
+  await t.test('Partai quantity 5 pack (diskon tier threshold) → accepted', () => {
+    assert.strictEqual(validateOrderPayload({ order: { customerName: 'Budi', phone: '08123', items: [{ productId: 'babat-sapi', variantId: 'babat-partai', quantity: 5 }] } }).ok, true)
   })
 
   await t.test('Mix 4 Lauk has no partai variant → cannot be ordered as partai', () => {

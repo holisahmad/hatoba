@@ -46,6 +46,7 @@ export async function POST(request: Request) {
       marketingName,
       status,
       source,
+      statusNotes,
     } = body
 
     if (!customerName || !items || !Array.isArray(items) || items.length === 0) {
@@ -75,7 +76,7 @@ export async function POST(request: Request) {
       paidAmount: typeof paidAmount === 'number' ? paidAmount : (totalAmount || 0),
       changeAmount: changeAmount || 0,
       verifiedAt: status === 'VERIFIED' ? new Date().toISOString() : undefined,
-      statusNotes: `Dibuat via Kasir POS (${paymentMethod || 'Tunai'})`,
+      statusNotes: statusNotes || `Dibuat via Kasir POS (${paymentMethod || 'Tunai'})`,
     })
 
     return NextResponse.json({ success: true, order: newOrder })

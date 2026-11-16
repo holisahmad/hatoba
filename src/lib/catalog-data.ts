@@ -294,10 +294,10 @@ export const CATALOG_PRODUCTS: ProductItem[] = [
         id: 'babat-partai',
         name: 'Kemasan Partai (1 pack · 5 porsi)',
         packType: 'partai',
-        weight: 'Min. 10 pack',
+        weight: '1 pack · 5 porsi',
         portion: '1 pack · 5 porsi',
-        minQty: 10,
-        price: 65000,
+        minQty: 1,
+        price: 75000,
         isAvailable: true,
       },
     ],
@@ -330,10 +330,10 @@ export const CATALOG_PRODUCTS: ProductItem[] = [
         id: 'iso-partai',
         name: 'Kemasan Partai (1 pack · 5 porsi)',
         packType: 'partai',
-        weight: 'Min. 10 pack',
+        weight: '1 pack · 5 porsi',
         portion: '1 pack · 5 porsi',
-        minQty: 10,
-        price: 65000,
+        minQty: 1,
+        price: 75000,
         isAvailable: true,
       },
     ],
@@ -366,10 +366,10 @@ export const CATALOG_PRODUCTS: ProductItem[] = [
         id: 'paru-partai',
         name: 'Kemasan Partai (1 pack · 5 porsi)',
         packType: 'partai',
-        weight: 'Min. 10 pack',
+        weight: '1 pack · 5 porsi',
         portion: '1 pack · 5 porsi',
-        minQty: 10,
-        price: 70000,
+        minQty: 1,
+        price: 80000,
         isAvailable: true,
       },
     ],
@@ -402,10 +402,10 @@ export const CATALOG_PRODUCTS: ProductItem[] = [
         id: 'iga-partai',
         name: 'Kemasan Partai (1 pack · 5 porsi)',
         packType: 'partai',
-        weight: 'Min. 10 pack',
+        weight: '1 pack · 5 porsi',
         portion: '1 pack · 5 porsi',
-        minQty: 10,
-        price: 120000,
+        minQty: 1,
+        price: 130000,
         isAvailable: true,
       },
     ],
@@ -559,4 +559,21 @@ export const PARTNER_CLIENTS: PartnerClient[] = [
     badge: 'Mitra Aktif',
   },
 ]
+
+/**
+ * Menghitung harga satuan efektif varian berdasarkan kuantitas:
+ * - Kemasan partai order 1-4 pack: harga dasar (naik Rp 10.000)
+ * - Kemasan partai order ≥5 pack: diskon potongan Rp 10.000/pack
+ */
+export function getEffectiveUnitPrice(
+  variant: { packType?: 'retail' | 'partai' | string; price: number; id?: string },
+  quantity: number
+): number {
+  const isPartai = variant.packType === 'partai' || (variant.id && variant.id.includes('partai'))
+  if (isPartai && quantity >= 5) {
+    return Math.max(0, variant.price - 10000)
+  }
+  return variant.price
+}
+
 

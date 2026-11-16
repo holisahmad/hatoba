@@ -28,6 +28,8 @@ interface PosCartItem {
   variantId: string
   variantName: string
   unitPrice: number
+  basePrice?: number
+  isPartai?: boolean
   quantity: number
   subtotal: number
 }
@@ -37,6 +39,7 @@ interface PosCashierTabProps {
   recentOrders?: AdminOrder[]
   onOrderCreated: (newOrder: AdminOrder) => void
   onReprintOrder?: (order: AdminOrder) => void
+  onRefreshOrders?: () => void
   showToast: (msg: string, type: 'success' | 'error') => void
 }
 
@@ -45,6 +48,7 @@ export default function PosCashierTab({
   recentOrders = [],
   onOrderCreated,
   onReprintOrder,
+  onRefreshOrders,
   showToast,
 }: PosCashierTabProps) {
   // Search product
@@ -69,6 +73,8 @@ export default function PosCashierTab({
   const [paidAmountInput, setPaidAmountInput] = useState<string>('')
   const [discountNominal, setDiscountNominal] = useState<number>(0)
   const [loading, setLoading] = useState(false)
+  const [historyFilter, setHistoryFilter] = useState<'POS' | 'ALL'>('POS')
+  const [isRefreshingHistory, setIsRefreshingHistory] = useState(false)
 
   // Calculations
   const rawSubtotal = cart.reduce((sum, it) => sum + it.subtotal, 0)
@@ -105,25 +111,31 @@ export default function PosCashierTab({
     }).format(val)
   }
 
-  // Add variant to POS Cart
+  // Add variant to POS Cart (with Partai Tier Pricing: ≥5 pack dapat potongan Rp 10.000/pack)
   const handleAddToCart = (product: AdminProduct, variant: any) => {
     setCart((prev) => {
       const existingIdx = prev.findIndex(
         (it) => it.productId === product.id && it.variantId === variant.id
       )
 
+      const isPartai = variant.packType === 'partai' || variant.id.includes('partai')
+      const basePrice = variant.price
+
       if (existingIdx !== -1) {
         const next = [...prev]
         const curr = next[existingIdx]
         const newQty = curr.quantity + 1
+        const effectiveUnitPrice = isPartai && newQty >= 5 ? Math.max(0, basePrice - 10000) : basePrice
         next[existingIdx] = {
           ...curr,
           quantity: newQty,
-          subtotal: newQty * curr.unitPrice,
+          unitPrice: effectiveUnitPrice,
+          subtotal: newQty * effectiveUnitPrice,
         }
         return next
       }
 
+      const effectiveUnitPrice = isPartai && 1 >= 5 ? Math.max(0, basePrice - 10000) : basePrice
       return [
         ...prev,
         {
@@ -131,9 +143,11 @@ export default function PosCashierTab({
           productName: product.name,
           variantId: variant.id,
           variantName: variant.name,
-          unitPrice: variant.price,
+          unitPrice: effectiveUnitPrice,
+          basePrice,
+          isPartai,
           quantity: 1,
-          subtotal: variant.price,
+          subtotal: effectiveUnitPrice,
         },
       ]
     })
@@ -148,10 +162,18 @@ export default function PosCashierTab({
       if (newQty <= 0) {
         return next.filter((_, i) => i !== index)
       }
+
+      const prod = products.find((p) => p.id === curr.productId)
+      const v = prod?.variants.find((v) => v.id === curr.variantId)
+      const basePrice = curr.basePrice || v?.price || curr.unitPrice
+      const isPartai = curr.isPartai || curr.variantId.includes('partai') || v?.packType === 'partai'
+      const effectiveUnitPrice = isPartai && newQty >= 5 ? Math.max(0, basePrice - 10000) : basePrice
+
       next[index] = {
         ...curr,
         quantity: newQty,
-        subtotal: newQty * curr.unitPrice,
+        unitPrice: effectiveUnitPrice,
+        subtotal: newQty * effectiveUnitPrice,
       }
       return next
     })
@@ -368,29 +390,39 @@ export default function PosCashierTab({
 
               {/* Variant Buttons */}
               <div className="pt-2 border-t border-gray-100 space-y-1.5">
-                {prod.variants.map((v) => (
-                  <button
-                    key={v.id}
-                    type="button"
-                    onClick={() => handleAddToCart(prod, v)}
-                    className="w-full px-3 py-2 rounded-xl bg-[#FAF8F5] hover:bg-[#F2ECE1] border border-[#EAE4DC] hover:border-[#C59B47] text-left flex items-center justify-between text-xs transition-colors group"
-                  >
-                    <div>
-                      <span className="font-semibold text-[#111613] block group-hover:text-[#8C6B24]">
-                        {v.name}
-                      </span>
-                      <span className="text-[10px] text-gray-500">{v.weight || v.portion}</span>
-                    </div>
-                    <div className="text-right flex items-center gap-2">
-                      <span className="font-mono font-bold text-emerald-800">
-                        {formatIDR(v.price)}
-                      </span>
-                      <span className="w-5 h-5 rounded-full bg-white border border-gray-300 group-hover:bg-[#8C6B24] group-hover:text-white flex items-center justify-center text-xs font-bold transition-colors">
-                        +
-                      </span>
-                    </div>
-                  </button>
-                ))}
+                {prod.variants.map((v) => {
+                  const isPartai = v.packType === 'partai' || v.id.includes('partai')
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => handleAddToCart(prod, v)}
+                      className="w-full px-3 py-2 rounded-xl bg-[#FAF8F5] hover:bg-[#F2ECE1] border border-[#EAE4DC] hover:border-[#C59B47] text-left flex items-center justify-between text-xs transition-colors group"
+                    >
+                      <div>
+                        <span className="font-semibold text-[#111613] block group-hover:text-[#8C6B24]">
+                          {v.name}
+                        </span>
+                        <div className="flex items-center gap-1.5 text-[10px] text-gray-500">
+                          <span>{v.weight || v.portion}</span>
+                          {isPartai && (
+                            <span className="text-emerald-700 font-semibold bg-emerald-50 px-1 rounded">
+                              ≥5 pk: {formatIDR(v.price - 10000)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right flex items-center gap-2">
+                        <span className="font-mono font-bold text-emerald-800">
+                          {formatIDR(v.price)}
+                        </span>
+                        <span className="w-5 h-5 rounded-full bg-white border border-gray-300 group-hover:bg-[#8C6B24] group-hover:text-white flex items-center justify-center text-xs font-bold transition-colors">
+                          +
+                        </span>
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             </div>
           ))}
@@ -504,7 +536,14 @@ export default function PosCashierTab({
                   >
                     <div className="min-w-0 flex-1">
                       <div className="font-semibold text-[#111613] truncate">{it.productName}</div>
-                      <div className="text-[10px] text-gray-500 truncate">{it.variantName}</div>
+                      <div className="text-[10px] text-gray-500 truncate flex items-center gap-1">
+                        <span>{it.variantName}</span>
+                        {(it.isPartai || it.variantId.includes('partai')) && it.quantity >= 5 && (
+                          <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1 rounded">
+                            Diskon Rp 10rb/pk
+                          </span>
+                        )}
+                      </div>
                       <div className="font-mono text-emerald-800 font-bold">
                         {formatIDR(it.unitPrice)}
                       </div>
@@ -867,7 +906,7 @@ export default function PosCashierTab({
 
       {/* ================= BOTTOM: RIWAYAT TRANSAKSI POS & CETAK ULANG ================= */}
       <div className="lg:col-span-12 mt-4 bg-white p-5 sm:p-6 rounded-3xl border border-[#E8DFD5] shadow-xs space-y-4">
-        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+        <div className="flex flex-wrap items-center justify-between border-b border-gray-100 pb-3 gap-3">
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg bg-[#FAF6F0] border border-[#E2D6C5] flex items-center justify-center">
               <Printer className="w-3.5 h-3.5 text-[#8C6B24]" />
@@ -881,34 +920,96 @@ export default function PosCashierTab({
               </p>
             </div>
           </div>
-          <span className="text-xs font-semibold text-[#8C6B24] bg-[#FAF8F5] px-3 py-1 rounded-full border border-[#EAE4DC]">
-            {recentOrders.filter((o) => o.source === 'POS' || o.referenceCode.includes('POS')).length} Transaksi POS
-          </span>
+
+          <div className="flex items-center gap-2">
+            {/* Toggle POS vs ALL */}
+            <div className="flex items-center bg-[#FAF8F5] p-1 rounded-xl border border-[#EAE4DC] text-xs">
+              <button
+                type="button"
+                onClick={() => setHistoryFilter('POS')}
+                className={`px-3 py-1 rounded-lg font-semibold transition-all ${
+                  historyFilter === 'POS'
+                    ? 'bg-white text-[#8C6B24] shadow-xs border border-[#E2D6C5]'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                Kasir POS ({recentOrders.filter((o) => o.source === 'POS' || o.referenceCode.includes('POS')).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setHistoryFilter('ALL')}
+                className={`px-3 py-1 rounded-lg font-semibold transition-all ${
+                  historyFilter === 'ALL'
+                    ? 'bg-white text-[#8C6B24] shadow-xs border border-[#E2D6C5]'
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                Semua Order ({recentOrders.length})
+              </button>
+            </div>
+
+            {/* Refresh Button */}
+            {onRefreshOrders && (
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsRefreshingHistory(true)
+                  try {
+                    await onRefreshOrders()
+                  } finally {
+                    setTimeout(() => setIsRefreshingHistory(false), 500)
+                  }
+                }}
+                disabled={isRefreshingHistory}
+                title="Muat ulang riwayat transaksi"
+                className="px-3 py-1.5 rounded-xl bg-[#FAF8F5] hover:bg-[#F2ECE1] border border-[#EAE4DC] text-[#8C6B24] text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingHistory ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">Segarkan</span>
+              </button>
+            )}
+          </div>
         </div>
 
-        {recentOrders.filter((o) => o.source === 'POS' || o.referenceCode.includes('POS')).length === 0 ? (
-          <div className="py-8 text-center text-xs text-gray-400">
-            Belum ada transaksi dari kasir POS hari ini. Transaksi baru akan muncul di sini.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-gray-100 text-gray-500 text-[11px] text-left">
-                  <th className="py-2 px-3">No. Ref</th>
-                  <th className="py-2 px-3">Waktu</th>
-                  <th className="py-2 px-3">Pelanggan / Resto</th>
-                  <th className="py-2 px-3">Daftar Menu</th>
-                  <th className="py-2 px-3">Total Tagihan</th>
-                  <th className="py-2 px-3">Metode &amp; Status</th>
-                  <th className="py-2 px-3 text-right">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {recentOrders
-                  .filter((o) => o.source === 'POS' || o.referenceCode.includes('POS'))
-                  .slice(0, 10)
-                  .map((ord) => (
+        {(() => {
+          const displayedOrders =
+            historyFilter === 'POS'
+              ? recentOrders.filter((o) => o.source === 'POS' || o.referenceCode.includes('POS'))
+              : recentOrders
+
+          if (displayedOrders.length === 0) {
+            return (
+              <div className="py-8 text-center text-xs text-gray-400 space-y-2">
+                <p>Belum ada transaksi dari kasir POS yang tercatat.</p>
+                {recentOrders.length > 0 && historyFilter === 'POS' && (
+                  <button
+                    type="button"
+                    onClick={() => setHistoryFilter('ALL')}
+                    className="text-[#8C6B24] font-semibold underline text-xs"
+                  >
+                    Lihat {recentOrders.length} transaksi dari Web Storefront
+                  </button>
+                )}
+              </div>
+            )
+          }
+
+          return (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-gray-100 text-gray-500 text-[11px] text-left">
+                    <th className="py-2 px-3">No. Ref</th>
+                    <th className="py-2 px-3">Waktu</th>
+                    <th className="py-2 px-3">Pelanggan / Resto</th>
+                    <th className="py-2 px-3">Daftar Menu</th>
+                    <th className="py-2 px-3">Total Tagihan</th>
+                    <th className="py-2 px-3">Metode &amp; Status</th>
+                    <th className="py-2 px-3 text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {displayedOrders.slice(0, 20).map((ord) => (
                     <tr key={ord.id} className="hover:bg-gray-50/50">
                       <td className="py-3 px-3 font-mono font-bold text-[#8C6B24]">
                         {ord.referenceCode}
@@ -933,7 +1034,7 @@ export default function PosCashierTab({
                       <td className="py-3 px-3 font-mono font-bold text-emerald-800 whitespace-nowrap">
                         {formatIDR(ord.totalAmount)}
                       </td>
-                      <td className="py-3 px-3 whitespace-nowrap">
+                      <td className="py-3 px-3">
                         <span
                           className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
                             ord.paymentStatus === 'LUNAS' || ord.status === 'VERIFIED'
@@ -947,6 +1048,11 @@ export default function PosCashierTab({
                         >
                           {ord.paymentStatus || ord.paymentMethod || 'Tunai'}
                         </span>
+                        {ord.statusNotes && (
+                          <div className="text-[10px] text-gray-400 mt-0.5 max-w-[180px] truncate" title={ord.statusNotes}>
+                            {ord.statusNotes}
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-3 text-right whitespace-nowrap">
                         <button
@@ -960,10 +1066,11 @@ export default function PosCashierTab({
                       </td>
                     </tr>
                   ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </tbody>
+              </table>
+            </div>
+          )
+        })()}
       </div>
     </div>
   )

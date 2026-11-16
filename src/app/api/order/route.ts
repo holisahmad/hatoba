@@ -49,14 +49,19 @@ export async function POST(request: Request) {
         )
       }
 
-      const subtotal = variant.price * clientItem.quantity
+      const isPartai = variant.packType === 'partai' || variant.id.includes('partai')
+      const effectiveUnitPrice = isPartai && clientItem.quantity >= 5
+        ? Math.max(0, variant.price - 10000)
+        : variant.price
+
+      const subtotal = effectiveUnitPrice * clientItem.quantity
       computedTotal += subtotal
 
       validatedItems.push({
         productName: product.name,
         variantName: variant.name,
         quantity: clientItem.quantity,
-        unitPrice: variant.price,
+        unitPrice: effectiveUnitPrice,
         subtotal,
       })
     }

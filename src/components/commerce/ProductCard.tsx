@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import Image from 'next/image'
 import { Plus, Minus, ShoppingBag, Snowflake, Check, ShieldCheck } from 'lucide-react'
-import { ProductItem, ProductVariant } from '@/lib/catalog-data'
+import { ProductItem, ProductVariant, getEffectiveUnitPrice } from '@/lib/catalog-data'
 import { useCart } from '@/lib/cart-context'
 import { formatRupiah } from '@/lib/whatsapp'
 
@@ -26,13 +26,16 @@ export default function ProductCard({ product }: ProductCardProps) {
   }
 
   const handleAddToCart = () => {
+    const effectivePrice = getEffectiveUnitPrice(selectedVariant, quantity)
     addItem({
       productId: product.id,
       productName: product.name,
       variantId: selectedVariant.id,
       variantName: selectedVariant.name,
       weight: selectedVariant.weight,
-      price: selectedVariant.price,
+      price: effectivePrice,
+      basePrice: selectedVariant.price,
+      packType: selectedVariant.packType,
       quantity,
       packagingImage: product.packagingImage,
       minQty: selectedVariant.minQty,
@@ -176,21 +179,30 @@ export default function ProductCard({ product }: ProductCardProps) {
           </div>
 
           {/* Selected Variant Specs */}
-          <div className="mt-3 p-3 rounded-xl bg-[#FAF8F5] border border-[#E8E4DC] text-xs text-gray-600 space-y-1">
+          <div className="mt-3 p-3 rounded-xl bg-[#FAF8F5] border border-[#E8E4DC] text-xs text-gray-600 space-y-1.5">
             <div className="flex justify-between">
               <span className="font-light">Estimasi Porsi:</span>
               <strong className="text-[#141615] font-serif-title">{selectedVariant.portion}</strong>
             </div>
+
+            {selectedVariant.packType === 'partai' ? (
+              <div className="p-2 rounded-lg bg-emerald-50/80 border border-emerald-200/70 text-[11px] space-y-0.5">
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold text-emerald-900">Skema Harga Partai:</span>
+                  <span className="font-bold font-mono text-emerald-800">Bisa order mulai 1 pack</span>
+                </div>
+                <div className="text-emerald-700 leading-snug">
+                  • 1–4 pack: <strong>{formatRupiah(selectedVariant.price)}</strong> / pack
+                  <br />
+                  • ≥5 pack: <strong className="text-emerald-900 underline">{formatRupiah(selectedVariant.price - 10000)}</strong> / pack (Potongan Rp 10.000/pk)
+                </div>
+              </div>
+            ) : null}
+
             {selectedVariant.originalPrice && selectedVariant.originalPrice > selectedVariant.price && (
               <div className="flex justify-between text-[#B8292F] font-semibold text-[11px]">
                 <span>Hemat:</span>
                 <strong>{formatRupiah(selectedVariant.originalPrice - selectedVariant.price)} / pack</strong>
-              </div>
-            )}
-            {selectedVariant.minQty > 1 && (
-              <div className="flex justify-between text-[#B8292F] font-medium text-[11px]">
-                <span>Ketentuan Order:</span>
-                <strong>Min. {selectedVariant.minQty} pack</strong>
               </div>
             )}
           </div>
@@ -232,28 +244,42 @@ export default function ProductCard({ product }: ProductCardProps) {
           </div>
 
           {/* Add to Cart Button */}
-          <button
-            type="button"
-            suppressHydrationWarning
-            onClick={handleAddToCart}
-            className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md ${
-              addedToast
-                ? 'bg-[#0D281E] text-white'
-                : 'bg-gold hover:bg-amber-400 text-obsidian-950 shadow-gold/20 hover:shadow-gold/40'
-            }`}
-          >
-            {addedToast ? (
-              <>
-                <Check className="w-4 h-4 text-emerald-accent" />
-                <span>Masuk Keranjang!</span>
-              </>
-            ) : (
-              <>
-                <ShoppingBag className="w-4 h-4" />
-                <span>+ Keranjang ({formatRupiah(selectedVariant.price * quantity)})</span>
-              </>
-            )}
-          </button>
+          {(() => {
+            const effectiveUnitPrice = getEffectiveUnitPrice(selectedVariant, quantity)
+            const isDiscountActive = selectedVariant.packType === 'partai' && quantity >= 5
+
+            return (
+              <button
+                type="button"
+                suppressHydrationWarning
+                onClick={handleAddToCart}
+                className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 transition-all shadow-md ${
+                  addedToast
+                    ? 'bg-[#0D281E] text-white'
+                    : 'bg-gold hover:bg-amber-400 text-obsidian-950 shadow-gold/20 hover:shadow-gold/40'
+                }`}
+              >
+                {addedToast ? (
+                  <div className="flex items-center gap-1.5">
+                    <Check className="w-4 h-4 text-emerald-accent" />
+                    <span>Masuk Keranjang!</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-1.5">
+                      <ShoppingBag className="w-4 h-4" />
+                      <span>+ Keranjang ({formatRupiah(effectiveUnitPrice * quantity)})</span>
+                    </div>
+                    {isDiscountActive && (
+                      <span className="text-[10px] bg-emerald-800 text-white px-2 py-0.5 rounded-full font-mono font-bold">
+                        Hemat Rp {(10000 * quantity).toLocaleString('id-ID')}
+                      </span>
+                    )}
+                  </>
+                )}
+              </button>
+            )
+          })()}
         </div>
       </div>
     </div>

@@ -789,11 +789,23 @@ export default function AdminPage() {
           <PosCashierTab
             products={products}
             recentOrders={orders}
-            onOrderCreated={(newOrder) => {
+            onOrderCreated={async (newOrder) => {
               setOrders((prev) => [newOrder, ...prev])
               setSelectedOrderForPrint(newOrder)
+              try {
+                const [ordersRes, logsRes] = await Promise.all([
+                  fetch('/api/admin/orders'),
+                  fetch('/api/admin/logs'),
+                ])
+                const [ordersData, logsData] = await Promise.all([ordersRes.json(), logsRes.json()])
+                if (ordersData.orders) setOrders(ordersData.orders)
+                if (logsData.logs) setLogs(logsData.logs)
+              } catch (e) {
+                console.warn('Sync orders/logs error:', e)
+              }
             }}
             onReprintOrder={(ord) => setSelectedOrderForPrint(ord)}
+            onRefreshOrders={fetchAllData}
             showToast={showToast}
           />
         )}
@@ -1240,7 +1252,14 @@ export default function AdminPage() {
                       <span className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-white border-2 border-[#C59B47]" />
 
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
-                        <span className="font-bold text-xs text-[#111613]">{log.title}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-xs text-[#111613]">{log.title}</span>
+                          {log.action === 'POS_TRANSACTION' && (
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                              Kasir POS
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[11px] text-gray-400 font-mono">
                           {new Date(log.timestamp).toLocaleString('id-ID', {
                             day: 'numeric',
