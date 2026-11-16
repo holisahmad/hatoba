@@ -378,6 +378,18 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
                 </table>
               </div>
 
+              {/* CATATAN PENYESUAIAN STOK (HANYA MUNCUL DI INVOICE JIKA ADA) */}
+              {order.adjustmentNotes && (
+                <div className="p-3.5 rounded-xl bg-amber-50/90 border border-amber-300 text-xs text-amber-950 space-y-1 print:bg-white print:border-black">
+                  <div className="font-bold text-[11px] uppercase tracking-wider text-amber-900 print:text-black flex items-center gap-1.5">
+                    <span>⚠️ Catatan Penyesuaian Pesanan &amp; Stok:</span>
+                  </div>
+                  <p className="text-[11px] text-amber-950 print:text-black leading-relaxed">
+                    {order.adjustmentNotes}
+                  </p>
+                </div>
+              )}
+
               {/* Bottom Section: Rekening Bank & Stempel Badge */}
               <div className="relative pt-2">
                 {/* DIGITAL STAMP / STEMPEL BADGE WATERMARK */}
@@ -609,6 +621,14 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
                   </div>
                 ))}
               </div>
+
+              {/* CATATAN PENYESUAIAN STOK DI NOTA THERMAL */}
+              {order.adjustmentNotes && (
+                <div className="py-2 border-b border-dashed border-gray-400 text-[10px] space-y-0.5">
+                  <div className="font-bold text-gray-900">[!] CATATAN PENYESUAIAN STOK:</div>
+                  <div className="text-gray-700 leading-tight">{order.adjustmentNotes}</div>
+                </div>
+              )}
 
               <div className="py-2.5 space-y-1.5 border-b border-dashed border-gray-400">
                 <div className="flex justify-between text-sm font-bold">

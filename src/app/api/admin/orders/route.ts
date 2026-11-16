@@ -96,7 +96,8 @@ export async function PATCH(request: Request) {
   }
 
   try {
-    const { referenceCode, status, notes, adminUser } = await request.json()
+    const { referenceCode, status, notes, adminUser, items, totalAmount, adjustmentNotes } =
+      await request.json()
 
     if (!referenceCode || !['PENDING', 'VERIFIED', 'REJECTED'].includes(status)) {
       return NextResponse.json(
@@ -109,7 +110,12 @@ export async function PATCH(request: Request) {
       referenceCode,
       status as OrderStatus,
       adminUser || 'Admin Pusat',
-      notes
+      notes,
+      {
+        updatedItems: Array.isArray(items) ? items : undefined,
+        newTotalAmount: typeof totalAmount === 'number' ? totalAmount : undefined,
+        adjustmentNotes: typeof adjustmentNotes === 'string' ? adjustmentNotes : undefined,
+      }
     )
 
     if (!updated) {

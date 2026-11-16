@@ -29,6 +29,8 @@ export interface AdminOrder {
   verifiedAt?: string
   rejectedAt?: string
   statusNotes?: string
+  adjustmentNotes?: string
+  originalItems?: OrderItem[]
   paymentMethod?: string
   paymentStatus?: 'LUNAS' | 'DP' | 'TEMPO' | 'BELUM_BAYAR'
   source?: 'WEB' | 'POS' | 'WHATSAPP' | 'TELEPON'
@@ -259,7 +261,12 @@ export async function updateAdminOrderStatus(
   referenceCodeOrId: string,
   newStatus: OrderStatus,
   adminUser = 'Admin',
-  statusNotes?: string
+  statusNotes?: string,
+  options?: {
+    updatedItems?: OrderItem[]
+    newTotalAmount?: number
+    adjustmentNotes?: string
+  }
 ): Promise<AdminOrder | null> {
   const orders = await getAdminOrders()
   const order = orders.find((o) => o.id === referenceCodeOrId || o.referenceCode === referenceCodeOrId)
@@ -267,6 +274,22 @@ export async function updateAdminOrderStatus(
 
   order.status = newStatus
   order.statusNotes = statusNotes || order.statusNotes
+
+  // Handle stock adjustments if provided
+  if (options?.updatedItems && options.updatedItems.length > 0) {
+    if (!order.originalItems) {
+      order.originalItems = [...order.items]
+    }
+    order.items = options.updatedItems
+  }
+
+  if (typeof options?.newTotalAmount === 'number') {
+    order.totalAmount = options.newTotalAmount
+  }
+
+  if (options?.adjustmentNotes) {
+    order.adjustmentNotes = options.adjustmentNotes
+  }
 
   if (newStatus === 'VERIFIED') {
     order.verifiedAt = new Date().toISOString()
@@ -291,15 +314,33 @@ export async function updateAdminOrderStatus(
   }
 
   // Log action
+  const isAdjusted = Boolean(options?.adjustmentNotes || options?.updatedItems)
   const actionType = newStatus === 'VERIFIED' ? 'ORDER_VERIFIED' : newStatus === 'REJECTED' ? 'ORDER_REJECTED' : 'ORDER_PENDING'
-  const actionLabel = newStatus === 'VERIFIED' ? 'Diverifikasi / Diterima' : newStatus === 'REJECTED' ? 'Ditolak' : 'Dikembalikan ke Pending'
+  const actionLabel = isAdjusted
+    ? 'Diterima dengan Penyesuaian Stok'
+    : newStatus === 'VERIFIED'
+    ? 'Diverifikasi / Diterima'
+    : newStatus === 'REJECTED'
+    ? 'Ditolak'
+    : 'Dikembalikan ke Pending'
+
+  const descNote = options?.adjustmentNotes
+    ? ` (Penyesuaian: "${options.adjustmentNotes}")`
+    : statusNotes
+    ? `: "${statusNotes}"`
+    : ''
 
   await recordActivityLog({
     action: actionType,
     title: `Order ${actionLabel}`,
-    description: `Pesanan ${order.referenceCode} (${order.customerName}) diubah statusnya menjadi ${newStatus}${statusNotes ? `: "${statusNotes}"` : ''}`,
+    description: `Pesanan ${order.referenceCode} (${order.customerName}) diubah statusnya menjadi ${newStatus}${descNote}`,
     adminUser,
-    metadata: { referenceCode: order.referenceCode, status: newStatus },
+    metadata: {
+      referenceCode: order.referenceCode,
+      status: newStatus,
+      isAdjusted,
+      totalAmount: order.totalAmount,
+    },
   })
 
   return order

@@ -33,7 +33,7 @@ import {
   ImageIcon,
   Receipt,
 } from 'lucide-react'
-import { AdminOrder, AdminProduct, ActivityLog, OrderStatus } from '@/lib/admin-store'
+import { AdminOrder, AdminProduct, ActivityLog, OrderStatus, OrderItem } from '@/lib/admin-store'
 import OrderPrintModal from '@/components/admin/OrderPrintModal'
 import PosCashierTab from '@/components/admin/PosCashierTab'
 
@@ -67,6 +67,12 @@ export default function AdminPage() {
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null)
   const [statusNoteInput, setStatusNoteInput] = useState('')
   const [pendingStatusAction, setPendingStatusAction] = useState<OrderStatus | null>(null)
+
+  // Stock Adjustment & Verification Modal
+  const [adjustingOrder, setAdjustingOrder] = useState<AdminOrder | null>(null)
+  const [adjustedItems, setAdjustedItems] = useState<OrderItem[]>([])
+  const [adjustmentNoteInput, setAdjustmentNoteInput] = useState('')
+  const [adjustmentLoading, setAdjustmentLoading] = useState(false)
 
   // Toast notification
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
@@ -208,6 +214,75 @@ export default function AdminPage() {
       }
     } catch {
       alert('Gagal memperbarui status order.')
+    }
+  }
+
+  // Handle Open Stock Adjustment Modal
+  const openAdjustmentModal = (ord: AdminOrder) => {
+    setAdjustingOrder(ord)
+    setAdjustedItems(JSON.parse(JSON.stringify(ord.items)))
+    setAdjustmentNoteInput(ord.adjustmentNotes || '')
+  }
+
+  // Handle Save Adjusted Order (Accept As-Is OR Accept with Adjusted Stock)
+  const handleSaveAdjustedOrder = async (acceptAsIs = false) => {
+    if (!adjustingOrder) return
+    setAdjustmentLoading(true)
+
+    try {
+      const payload: {
+        referenceCode: string
+        status: OrderStatus
+        adminUser: string
+        items?: OrderItem[]
+        totalAmount?: number
+        adjustmentNotes?: string
+      } = {
+        referenceCode: adjustingOrder.referenceCode,
+        status: 'VERIFIED',
+        adminUser: 'Admin Pusat',
+      }
+
+      if (!acceptAsIs) {
+        if (adjustedItems.length === 0) {
+          alert('Pesanan harus memiliki minimal 1 item. Jika semua stok kosong, silakan gunakan tombol Tolak Pesanan.')
+          setAdjustmentLoading(false)
+          return
+        }
+        const newTotal = adjustedItems.reduce((acc, it) => acc + it.subtotal, 0)
+        payload.items = adjustedItems
+        payload.totalAmount = newTotal
+        payload.adjustmentNotes =
+          adjustmentNoteInput.trim() || 'Stok disesuaikan atas konfirmasi & kesepakatan konsumen via WhatsApp'
+      }
+
+      const res = await fetch('/api/admin/orders', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      const data = await res.json()
+      if (data.success && data.order) {
+        setOrders((prev) =>
+          prev.map((o) => (o.referenceCode === adjustingOrder.referenceCode ? data.order : o))
+        )
+        setAdjustingOrder(null)
+        showToast(
+          acceptAsIs
+            ? `Pesanan ${adjustingOrder.referenceCode} berhasil diterima sesuai order awal.`
+            : `Pesanan ${adjustingOrder.referenceCode} berhasil diterima dengan penyesuaian stok.`
+        )
+        const logsRes = await fetch('/api/admin/logs')
+        const logsData = await logsRes.json()
+        if (logsData.logs) setLogs(logsData.logs)
+      } else {
+        showToast(data.error || 'Gagal memproses penyesuaian pesanan.', 'error')
+      }
+    } catch {
+      showToast('Terjadi kesalahan koneksi saat menyimpan penyesuaian.', 'error')
+    } finally {
+      setAdjustmentLoading(false)
     }
   }
 
@@ -974,6 +1049,12 @@ export default function AdminPage() {
                                 </li>
                               ))}
                             </ul>
+                            {ord.adjustmentNotes && (
+                              <div className="mt-2 p-2 rounded-lg bg-amber-50 border border-amber-200 text-[10px] text-amber-900 leading-tight">
+                                <strong className="text-amber-950 block">⚠️ Penyesuaian Stok:</strong>
+                                <span>{ord.adjustmentNotes}</span>
+                              </div>
+                            )}
                           </td>
 
                           {/* Total */}
@@ -981,6 +1062,11 @@ export default function AdminPage() {
                             <span className="font-mono font-bold text-sm text-[#111613] block">
                               {formatIDR(ord.totalAmount)}
                             </span>
+                            {ord.originalItems && (
+                              <span className="text-[9px] text-gray-400 block mt-0.5">
+                                (Order awal: {ord.originalItems.reduce((acc, it) => acc + it.quantity, 0)} pk)
+                              </span>
+                            )}
                           </td>
 
                           {/* Status */}
@@ -1003,6 +1089,11 @@ export default function AdminPage() {
                                 <span>Ditolak</span>
                               </span>
                             )}
+                            {ord.adjustmentNotes && (
+                              <span className="inline-block mt-1 px-2 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                Stok Disesuaikan
+                              </span>
+                            )}
                             {ord.statusNotes && (
                               <span className="block text-[10px] text-gray-500 mt-1 italic max-w-[140px]">
                                 {ord.statusNotes}
@@ -1012,14 +1103,24 @@ export default function AdminPage() {
 
                           {/* Actions */}
                           <td className="py-4 px-4 align-top text-right space-y-1.5">
-                            <div className="flex items-center justify-end gap-1.5">
+                            <div className="flex items-center justify-end gap-1.5 flex-wrap">
                               {ord.status !== 'VERIFIED' && (
                                 <button
-                                  onClick={() => handleUpdateOrderStatus(ord.referenceCode, 'VERIFIED')}
-                                  title="Terima / Verifikasi Pesanan"
-                                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition-all shadow-sm"
+                                  onClick={() => openAdjustmentModal(ord)}
+                                  title="Cek Stok & Terima Pesanan (Bisa Sesuaikan Kuantitas)"
+                                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition-all shadow-sm flex items-center gap-1"
                                 >
-                                  Terima
+                                  <span>Cek &amp; Terima</span>
+                                </button>
+                              )}
+
+                              {ord.status === 'VERIFIED' && (
+                                <button
+                                  onClick={() => openAdjustmentModal(ord)}
+                                  title="Edit / Sesuaikan Kuantitas Stok Pesanan Ini"
+                                  className="px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-semibold transition-all"
+                                >
+                                  Edit Stok
                                 </button>
                               )}
 
@@ -1283,6 +1384,297 @@ export default function AdminPage() {
           </div>
         )}
       </main>
+
+      {/* ======================= MODAL: CEK STOK & TERIMA ORDER (DENGAN PENYESUAIAN) ======================= */}
+      {adjustingOrder && (
+        <div className="fixed inset-0 z-[70] bg-black/65 backdrop-blur-sm overflow-y-auto p-3 sm:p-6 flex justify-center items-start">
+          <div className="relative w-full max-w-2xl bg-white rounded-3xl border border-[#E8DFD5] shadow-2xl my-4 sm:my-8 flex flex-col max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-4rem)] overflow-hidden">
+            {/* Header Modal */}
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4 sm:px-8 sm:py-5 flex-shrink-0 bg-[#FBF9F5]">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-bold text-[#8C6B24] bg-[#F2ECE1] px-2.5 py-0.5 rounded-full border border-[#D8CEBE]">
+                    {adjustingOrder.referenceCode}
+                  </span>
+                  <span className="text-[11px] text-gray-500">
+                    {new Date(adjustingOrder.createdAt).toLocaleString('id-ID')}
+                  </span>
+                </div>
+                <h3 className="font-serif-title text-xl font-bold text-[#111613] mt-1">
+                  Cek Stok &amp; Terima Pesanan
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAdjustingOrder(null)}
+                className="w-9 h-9 rounded-full bg-white border border-[#EAE4DC] hover:bg-gray-100 flex items-center justify-center text-gray-500 hover:text-black font-bold text-sm transition-colors"
+                title="Tutup Modal"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Scrollable Body */}
+            <div className="flex-1 overflow-y-auto px-6 py-5 sm:px-8 sm:py-6 space-y-5">
+              {/* Info Konsumen & Tombol Chat WA */}
+              <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div>
+                  <span className="font-bold text-sm text-[#111613] block">{adjustingOrder.customerName}</span>
+                  <span className="text-gray-600">
+                    {adjustingOrder.businessName ? `${adjustingOrder.businessName} · ` : ''}
+                    {adjustingOrder.city} ({adjustingOrder.hubArea})
+                  </span>
+                  {adjustingOrder.notes && (
+                    <div className="mt-1 text-[11px] text-amber-900 bg-amber-50/80 p-1.5 rounded border border-amber-200">
+                      <strong>Catatan Konsumen:</strong> {adjustingOrder.notes}
+                    </div>
+                  )}
+                </div>
+
+                <a
+                  href={`https://wa.me/${adjustingOrder.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                    `Halo ${adjustingOrder.customerName}, kami dari HATOBA Frozen Food mengenai pesanan ${adjustingOrder.referenceCode}...`
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-4 py-2.5 rounded-full bg-[#1D6C48] hover:bg-[#155336] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm flex-shrink-0 transition-all"
+                >
+                  <span>Chat WA Konsumen ({adjustingOrder.phone})</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </a>
+              </div>
+
+              {/* Petunjuk Admin */}
+              <div className="p-3 rounded-xl bg-blue-50/80 border border-blue-200 text-xs text-blue-900 leading-relaxed">
+                ℹ️ <strong>Alur Konfirmasi Stok:</strong> Periksa ketersediaan stok fisik di gudang. Jika ada item yang kurang/kosong, hubungi konsumen via WhatsApp terlebih dahulu. Setelah sepakat, sesuaikan jumlah pack produk di bawah ini sebelum menerima order.
+              </div>
+
+              {/* Rincian Produk Pesanan (Bisa Diedit Qty / Tambah / Kurang) */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-[#111613] uppercase tracking-wider">
+                    Daftar Produk Pesanan (Sesuaikan Kuantitas):
+                  </label>
+                  <span className="text-[11px] text-gray-500">
+                    {adjustedItems.length} produk terpilih
+                  </span>
+                </div>
+
+                <div className="space-y-2.5">
+                  {adjustedItems.map((item, idx) => {
+                    const isPartai = item.variantName.toLowerCase().includes('partai') || item.variantName.includes('5 porsi')
+                    return (
+                      <div
+                        key={idx}
+                        className="p-3.5 rounded-2xl bg-white border border-[#EAE2D5] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <h5 className="font-bold text-[#111613] text-sm">{item.productName}</h5>
+                          <div className="flex items-center gap-2 text-gray-600 mt-0.5">
+                            <span className="text-[11px] text-[#8C6B24] font-medium">{item.variantName}</span>
+                            <span>•</span>
+                            <span className="font-mono">{formatIDR(item.unitPrice)} / pk</span>
+                          </div>
+                          {isPartai && item.quantity >= 5 && (
+                            <span className="inline-block mt-1 text-[9px] bg-emerald-50 text-emerald-800 font-semibold px-2 py-0.5 rounded border border-emerald-200">
+                              ✓ Diskon Partai Rp 10.000/pk aktif
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Stepper Jumlah Pack */}
+                        <div className="flex items-center justify-between sm:justify-end gap-3 flex-shrink-0">
+                          <div className="flex items-center border border-[#D8CEBE] rounded-xl bg-[#FAF8F5] p-1 shadow-2xs">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextQty = item.quantity - 1
+                                if (nextQty <= 0) {
+                                  // Hapus item
+                                  setAdjustedItems((prev) => prev.filter((_, i) => i !== idx))
+                                } else {
+                                  setAdjustedItems((prev) =>
+                                    prev.map((it, i) => {
+                                      if (i !== idx) return it
+                                      const basePrice = it.unitPrice >= 65000 && it.unitPrice <= 75000 ? (nextQty >= 5 ? 65000 : 75000) : it.unitPrice
+                                      return {
+                                        ...it,
+                                        quantity: nextQty,
+                                        unitPrice: basePrice,
+                                        subtotal: basePrice * nextQty,
+                                      }
+                                    })
+                                  )
+                                }
+                              }}
+                              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white text-gray-700 active:scale-90 font-bold"
+                              title="Kurangi"
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              min="0"
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value) || 0
+                                if (val <= 0) {
+                                  setAdjustedItems((prev) => prev.filter((_, i) => i !== idx))
+                                } else {
+                                  setAdjustedItems((prev) =>
+                                    prev.map((it, i) => {
+                                      if (i !== idx) return it
+                                      return {
+                                        ...it,
+                                        quantity: val,
+                                        subtotal: it.unitPrice * val,
+                                      }
+                                    })
+                                  )
+                                }
+                              }}
+                              className="w-12 text-center text-xs font-mono font-bold bg-transparent focus:outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextQty = item.quantity + 1
+                                setAdjustedItems((prev) =>
+                                  prev.map((it, i) => {
+                                    if (i !== idx) return it
+                                    const basePrice = it.unitPrice >= 65000 && it.unitPrice <= 75000 ? (nextQty >= 5 ? 65000 : 75000) : it.unitPrice
+                                    return {
+                                      ...it,
+                                      quantity: nextQty,
+                                      unitPrice: basePrice,
+                                      subtotal: basePrice * nextQty,
+                                    }
+                                  })
+                                )
+                              }}
+                              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white text-gray-700 active:scale-90 font-bold"
+                              title="Tambah"
+                            >
+                              +
+                            </button>
+                          </div>
+
+                          <div className="text-right min-w-[90px]">
+                            <span className="font-mono font-bold text-sm text-[#111613]">
+                              {formatIDR(item.subtotal)}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setAdjustedItems((prev) => prev.filter((_, i) => i !== idx))}
+                            className="p-1.5 text-gray-400 hover:text-red-600 transition-colors"
+                            title="Hapus Produk Ini (Stok Kosong)"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                  {adjustedItems.length === 0 && (
+                    <div className="p-6 text-center text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-300">
+                      Semua produk telah dihapus dari rincian. Jika stok kosong total, disarankan gunakan opsi Tolak Pesanan.
+                    </div>
+                  )}
+                </div>
+
+                {/* Ringkasan Perubahan Total */}
+                <div className="p-4 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] flex items-center justify-between text-xs">
+                  <div>
+                    <span className="text-gray-500 block">Total Kuantitas Baru:</span>
+                    <strong className="text-sm font-mono text-[#111613]">
+                      {adjustedItems.reduce((acc, it) => acc + it.quantity, 0)} pack
+                    </strong>
+                    {adjustingOrder.items && (
+                      <span className="text-[10px] text-gray-400 block">
+                        (Order awal: {adjustingOrder.items.reduce((acc, it) => acc + it.quantity, 0)} pack)
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-gray-500 block">Total Nilai Tagihan Baru:</span>
+                    <strong className="text-base font-mono text-emerald-800">
+                      {formatIDR(adjustedItems.reduce((acc, it) => acc + it.subtotal, 0))}
+                    </strong>
+                    {adjustingOrder.totalAmount !== adjustedItems.reduce((acc, it) => acc + it.subtotal, 0) && (
+                      <span className="text-[10px] text-gray-400 block line-through">
+                        Semula: {formatIDR(adjustingOrder.totalAmount)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Catatan Penyesuaian Stok (WAJIB TERCATAT DI NOTA & INVOICE) */}
+              <div className="space-y-1.5 pt-1">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-[#111613] uppercase tracking-wider">
+                    Catatan Penyesuaian Stok &amp; Kesepakatan WA:
+                  </label>
+                  <span className="text-[10px] text-[#8C6B24] font-semibold">
+                    * Tertera di Nota &amp; Invoice Konsumen
+                  </span>
+                </div>
+                <textarea
+                  rows={2}
+                  placeholder="Misal: Stok Iga Sapi hanya ada 6 pack (order awal 10 pack). Telah dikonfirmasi dan disetujui konsumen via chat WhatsApp."
+                  value={adjustmentNoteInput}
+                  onChange={(e) => setAdjustmentNoteInput(e.target.value)}
+                  className="w-full p-3 rounded-xl bg-white border border-[#D8CEBE] text-xs text-[#111613] focus:outline-none focus:ring-2 focus:ring-[#C59B47]/20 focus:border-[#C59B47] shadow-2xs"
+                />
+                <p className="text-[10px] text-gray-500">
+                  Catatan ini akan tersimpan di sistem, dicetak pada Invoice resmi &amp; Struk Nota kasir, dan <strong>tidak muncul</strong> di Surat Jalan (DO).
+                </p>
+              </div>
+            </div>
+
+            {/* Footer Modal: Tombol Aksi */}
+            <div className="px-6 py-4 sm:px-8 sm:py-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 flex-shrink-0 bg-[#FBF9F5]">
+              <button
+                type="button"
+                onClick={() => setAdjustingOrder(null)}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-200/70 transition-colors"
+              >
+                Batal
+              </button>
+
+              <div className="w-full sm:w-auto flex flex-col sm:flex-row items-center gap-2">
+                {/* Opsi 1: Terima Tanpa Ubah */}
+                <button
+                  type="button"
+                  disabled={adjustmentLoading}
+                  onClick={() => handleSaveAdjustedOrder(true)}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-gray-300 bg-white hover:bg-gray-50 text-gray-800 text-xs font-bold transition-all shadow-xs disabled:opacity-50"
+                  title="Stok tersedia lengkap sesuai order awal"
+                >
+                  Terima Sesuai Pesanan Awal
+                </button>
+
+                {/* Opsi 2: Terima dengan Penyesuaian */}
+                <button
+                  type="button"
+                  disabled={adjustmentLoading}
+                  onClick={() => handleSaveAdjustedOrder(false)}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20 disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>
+                    {adjustmentLoading ? 'Menyimpan...' : 'Terima dengan Penyesuaian'}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ======================= MODAL: REJECT / NOTE PROMPT ======================= */}
       {updatingOrderId && pendingStatusAction && (
