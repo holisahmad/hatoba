@@ -15,6 +15,7 @@ import {
   Building,
   CreditCard,
   Image as ImageIcon,
+  CheckSquare,
 } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import { AdminOrder } from '@/lib/admin-store'
@@ -649,13 +650,14 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
         )}
 
           {/* ========================================================================= */}
-          {/* MODE 3: SURAT JALAN / DELIVERY ORDER (A4 / COLD CHAIN)                    */}
+          {/* MODE 3: SURAT JALAN / DELIVERY ORDER (A4 / COLD CHAIN DENGAN CEK LIST)     */}
           {/* ========================================================================= */}
           {printMode === 'surat_jalan' && (
             <div
               ref={invoiceContainerRef}
-              className="p-4 sm:p-6 border border-gray-300 rounded-2xl text-[#111613] space-y-6 print:border-none print:p-0"
+              className="p-4 sm:p-6 border border-gray-300 rounded-2xl text-[#111613] space-y-5 print:border-none print:p-0 bg-white"
             >
+              {/* Header Surat Jalan */}
               <div className="flex items-start justify-between border-b-2 border-[#111613] pb-4">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 relative flex-shrink-0">
@@ -682,7 +684,7 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
 
                 <div className="text-right">
                   <span className="inline-block px-3 py-1 rounded-md bg-[#111613] text-white text-xs font-bold tracking-wider uppercase mb-1">
-                    Surat Jalan &amp; DO
+                    Surat Jalan &amp; DO (Cek List)
                   </span>
                   <div className="font-mono text-xs font-bold text-[#8C6B24]">
                     {order.referenceCode}
@@ -698,10 +700,11 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
                 </div>
               </div>
 
+              {/* Data Pengiriman & Standar Cold Chain */}
               <div className="grid grid-cols-2 gap-4 text-xs">
                 <div className="p-3.5 rounded-xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-1">
                   <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider">
-                    Tujuan Pengiriman:
+                    Tujuan Pengiriman (Penerima):
                   </span>
                   <div className="font-bold text-sm text-[#111613]">{order.customerName}</div>
                   <div className="font-medium text-gray-700">{order.businessName || '-'}</div>
@@ -711,70 +714,165 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
 
                 <div className="p-3.5 rounded-xl bg-emerald-50/60 border border-emerald-200/80 space-y-1">
                   <span className="text-[10px] uppercase font-bold text-emerald-800 block tracking-wider flex items-center gap-1">
-                    <Snowflake className="w-3 h-3 text-emerald-600" />
-                    Standar Cold Chain Terjamin:
+                    <Snowflake className="w-3.5 h-3.5 text-emerald-600" />
+                    Standar Cold Chain −18°C:
                   </span>
-                  <div className="font-semibold text-emerald-950">Suhu Rantai Dingin: −18°C</div>
+                  <div className="font-semibold text-emerald-950">Kemasan Vacuum Sealed Beku Keras</div>
                   <div className="text-[11px] text-emerald-800 leading-relaxed">
-                    Kemasan vacuum sealed beku keras. Mohon langsung masukkan freezer bila tidak segera diolah.
+                    Armada dilengkapi ice-pack / cooler box. Mohon langsung masukkan freezer bila tidak langsung diolah.
                   </div>
                   {order.notes && (
                     <div className="text-[11px] text-gray-700 pt-1 border-t border-emerald-200">
-                      <span className="font-bold">Catatan:</span> {order.notes}
+                      <span className="font-bold">Catatan Kirim:</span> {order.notes}
                     </div>
                   )}
                 </div>
               </div>
 
+              {/* TABEL CHECKLIST BARANG (PETUGAS / DRIVER / KONSUMEN) */}
               <div>
-                <table className="w-full text-xs border border-gray-300 border-collapse">
+                <table className="w-full text-xs border border-gray-400 border-collapse print:border-black">
                   <thead>
-                    <tr className="bg-gray-100 text-gray-800 font-bold">
-                      <th className="border border-gray-300 p-2 text-center w-10">No</th>
-                      <th className="border border-gray-300 p-2 text-left">Nama Produk &amp; Spesifikasi</th>
-                      <th className="border border-gray-300 p-2 text-left">Varian Kemasan</th>
-                      <th className="border border-gray-300 p-2 text-center w-20">Kuantitas</th>
-                      <th className="border border-gray-300 p-2 text-center w-28">Kondisi Fisik</th>
+                    <tr className="bg-gray-100 print:bg-gray-200 text-gray-900 font-bold border-b border-gray-400">
+                      <th className="border border-gray-400 p-2 text-center w-8">No</th>
+                      <th className="border border-gray-400 p-2 text-left">Nama Produk &amp; Spesifikasi</th>
+                      <th className="border border-gray-400 p-2 text-left w-32">Varian / Kemasan</th>
+                      <th className="border border-gray-400 p-2 text-center w-24">Jumlah Order</th>
+                      <th className="border border-gray-400 p-2 text-center w-28 bg-blue-50/60 print:bg-white">
+                        <div>Cek Petugas/Kurir</div>
+                        <div className="text-[9px] font-normal text-gray-500 print:text-black">(Muat Armada)</div>
+                      </th>
+                      <th className="border border-gray-400 p-2 text-center w-32 bg-emerald-50/60 print:bg-white">
+                        <div>Cek Konsumen</div>
+                        <div className="text-[9px] font-normal text-gray-500 print:text-black">(Diterima Fisik)</div>
+                      </th>
+                      <th className="border border-gray-400 p-2 text-center w-28">Kondisi Segel/Suhu</th>
                     </tr>
                   </thead>
                   <tbody>
                     {order.items.map((it, idx) => (
                       <tr key={idx} className="hover:bg-gray-50/50">
-                        <td className="border border-gray-300 p-2 text-center font-mono">{idx + 1}</td>
-                        <td className="border border-gray-300 p-2 font-semibold text-[#111613]">
+                        <td className="border border-gray-400 p-2 text-center font-mono font-medium">{idx + 1}</td>
+                        <td className="border border-gray-400 p-2 font-semibold text-[#111613]">
                           {it.productName}
                         </td>
-                        <td className="border border-gray-300 p-2 text-gray-600">{it.variantName}</td>
-                        <td className="border border-gray-300 p-2 text-center font-mono font-bold text-sm">
+                        <td className="border border-gray-400 p-2 text-gray-700">{it.variantName}</td>
+                        <td className="border border-gray-400 p-2 text-center font-mono font-bold text-sm">
                           {it.quantity} pack
                         </td>
-                        <td className="border border-gray-300 p-2 text-center text-[10px] text-emerald-700 font-semibold">
-                          ✓ Beku −18°C Segel
+                        {/* KOTAK CHECKLIST PETUGAS / KURIR */}
+                        <td className="border border-gray-400 p-2 text-center bg-blue-50/20 print:bg-white">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <span className="w-5 h-5 rounded border-2 border-gray-600 print:border-black inline-block bg-white flex-shrink-0" />
+                            <span className="text-[10px] text-gray-700 print:text-black font-medium">Sesuai</span>
+                          </div>
+                        </td>
+                        {/* KOTAK CHECKLIST KONSUMEN / RESTO */}
+                        <td className="border border-gray-400 p-2 text-center bg-emerald-50/20 print:bg-white">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <span className="w-5 h-5 rounded border-2 border-gray-700 print:border-black inline-block bg-white flex-shrink-0" />
+                            <span className="text-[10px] text-gray-800 print:text-black font-medium">Lengkap</span>
+                          </div>
+                        </td>
+                        {/* STATUS KONDISI FISIK / SUHU */}
+                        <td className="border border-gray-400 p-2 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <span className="w-4 h-4 rounded border border-gray-500 print:border-black inline-block bg-white flex-shrink-0" />
+                            <span className="text-[10px] font-semibold text-emerald-800 print:text-black">
+                              −18°C Beku
+                            </span>
+                          </div>
                         </td>
                       </tr>
                     ))}
                   </tbody>
+                  <tfoot>
+                    <tr className="bg-gray-50 print:bg-gray-100 font-bold border-t-2 border-gray-400">
+                      <td colSpan={3} className="border border-gray-400 p-2 text-right">
+                        Total Kuantitas Muatan:
+                      </td>
+                      <td className="border border-gray-400 p-2 text-center font-mono text-sm text-[#8C6B24] print:text-black">
+                        {order.items.reduce((acc, it) => acc + it.quantity, 0)} pack
+                      </td>
+                      <td colSpan={3} className="border border-gray-400 p-2 text-[10px] text-gray-600 print:text-black">
+                        * Centang [ ✔ ] pada kotak setiap pack yang sudah diperiksa fisik
+                      </td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
 
-              <div className="pt-6 grid grid-cols-3 gap-6 text-center text-xs">
-                <div className="space-y-12">
-                  <span className="text-gray-500 font-medium">Disiapkan Oleh (Admin Cold Storage):</span>
-                  <div className="border-b border-gray-400 mx-4" />
-                  <span className="text-gray-400 text-[10px] block -mt-10">( Petugas Gudang )</span>
+              {/* BOX PANDUAN CEK LIST SAAT SERAH TERIMA */}
+              <div className="p-3 rounded-xl bg-[#FAF8F5] border border-gray-300 text-xs space-y-1.5 print:bg-white print:border-black">
+                <div className="font-bold text-[#111613] text-[11px] uppercase tracking-wider flex items-center gap-1.5">
+                  <CheckSquare className="w-3.5 h-3.5 text-[#8C6B24]" />
+                  <span>Petunjuk Cek List Serah Terima Barang (Kurir &amp; Konsumen):</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-gray-700 print:text-black pt-0.5">
+                  <div className="flex items-start gap-1.5">
+                    <span className="w-4 h-4 rounded border border-gray-600 inline-block flex-shrink-0 mt-0.5 bg-white" />
+                    <span>1. Kemasan vacuum sealed rapat, tidak ada kebocoran/sobek</span>
+                  </div>
+                  <div className="flex items-start gap-1.5">
+                    <span className="w-4 h-4 rounded border border-gray-600 inline-block flex-shrink-0 mt-0.5 bg-white" />
+                    <span>2. Produk kondisi beku keras (Suhu Cold Chain −18°C terjaga)</span>
+                  </div>
+                  <div className="flex items-start gap-1.5">
+                    <span className="w-4 h-4 rounded border border-gray-600 inline-block flex-shrink-0 mt-0.5 bg-white" />
+                    <span>3. Jumlah fisik pack cocok dengan pesanan tercetak</span>
+                  </div>
+                </div>
+                <div className="text-[10px] text-gray-500 print:text-black pt-1 border-t border-gray-200">
+                  <span className="font-semibold text-gray-700 print:text-black">Catatan Selisih / Kondisi Fisik Lapangan:</span>{' '}
+                  <span className="italic text-gray-400">...........................................................................................................................................................</span>
+                </div>
+              </div>
+
+              {/* 3 KOLOM TANDA TANGAN & SERAH TERIMA */}
+              <div className="pt-2 grid grid-cols-3 gap-4 text-center text-xs">
+                {/* 1. Petugas Gudang */}
+                <div className="p-2.5 border border-gray-300 rounded-xl print:border-black space-y-8 bg-gray-50/50 print:bg-white">
+                  <div className="text-[11px]">
+                    <span className="font-bold block text-gray-900">1. Disiapkan &amp; Dicek:</span>
+                    <span className="text-gray-500 print:text-black text-[10px]">(Petugas Gudang / QC)</span>
+                  </div>
+                  <div className="border-b border-gray-400 mx-2" />
+                  <div className="text-[10px] text-gray-600 print:text-black text-left px-1 -mt-6 space-y-1">
+                    <div>Nama: .......................................</div>
+                    <div>Tgl/Jam: ...................................</div>
+                  </div>
                 </div>
 
-                <div className="space-y-12">
-                  <span className="text-gray-500 font-medium">Dikirim Oleh (Kurir Cold Chain):</span>
-                  <div className="border-b border-gray-400 mx-4" />
-                  <span className="text-gray-400 text-[10px] block -mt-10">( Petugas Armada / Driver )</span>
+                {/* 2. Kurir / Driver Armada */}
+                <div className="p-2.5 border border-gray-300 rounded-xl print:border-black space-y-8 bg-gray-50/50 print:bg-white">
+                  <div className="text-[11px]">
+                    <span className="font-bold block text-gray-900">2. Dibawa &amp; Dikirim:</span>
+                    <span className="text-gray-500 print:text-black text-[10px]">(Kurir / Driver Armada)</span>
+                  </div>
+                  <div className="border-b border-gray-400 mx-2" />
+                  <div className="text-[10px] text-gray-600 print:text-black text-left px-1 -mt-6 space-y-1">
+                    <div>Nama: .......................................</div>
+                    <div>No. Pol: ....................................</div>
+                  </div>
                 </div>
 
-                <div className="space-y-12">
-                  <span className="text-gray-500 font-medium">Diterima Oleh (Pihak Pembeli):</span>
-                  <div className="border-b border-gray-400 mx-4" />
-                  <span className="text-gray-400 text-[10px] block -mt-10">( Staf Dapur / Restoran )</span>
+                {/* 3. Konsumen / Restoran Penerima */}
+                <div className="p-2.5 border border-gray-300 rounded-xl print:border-black space-y-8 bg-emerald-50/40 print:bg-white">
+                  <div className="text-[11px]">
+                    <span className="font-bold block text-emerald-950 print:text-black">3. Diterima &amp; Diverifikasi:</span>
+                    <span className="text-gray-500 print:text-black text-[10px]">(Konsumen / PIC Dapur)</span>
+                  </div>
+                  <div className="border-b border-gray-400 mx-2" />
+                  <div className="text-[10px] text-gray-600 print:text-black text-left px-1 -mt-6 space-y-1">
+                    <div>Nama: .......................................</div>
+                    <div>Jam Terima: ............................</div>
+                  </div>
                 </div>
+              </div>
+
+              {/* Disclaimer Legalitas */}
+              <div className="text-center text-[9px] text-gray-400 pt-1">
+                Surat Jalan ini adalah bukti serah terima resmi barang HATOBA Frozen Food. Komplain terkait kondisi fisik atau suhu wajib diverifikasi langsung saat serah terima bersama kurir pengantar.
               </div>
             </div>
           )}
