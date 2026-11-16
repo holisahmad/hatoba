@@ -53,24 +53,32 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
     setIsExportingImage(true)
 
     try {
-      // Small delay to ensure any layout/fonts are settled
-      await new Promise((r) => setTimeout(r, 150))
+      // Small delay to ensure layout & fonts are fully settled
+      await new Promise((r) => setTimeout(r, 300))
 
       const node = invoiceContainerRef.current
-      const rect = node.getBoundingClientRect()
+
+      // For thermal mode: use a fixed 340px width to avoid cropping.
+      // For other modes: use the actual rendered width.
+      const isThermalMode = printMode === 'thermal'
+      const exportWidth = isThermalMode ? 340 : node.getBoundingClientRect().width
+      const exportHeight = node.scrollHeight // use scrollHeight to capture full content
 
       const dataUrl = await toPng(node, {
         quality: 0.98,
         pixelRatio: 2, // High resolution for crystal clear mobile sharing
         backgroundColor: '#ffffff',
-        width: rect.width,
-        height: rect.height,
+        width: exportWidth,
+        height: exportHeight,
         style: {
           margin: '0',
           left: '0',
           top: '0',
           transform: 'none',
           position: 'static',
+          width: `${exportWidth}px`,
+          boxSizing: 'border-box',
+          overflow: 'visible',
         },
       })
 
@@ -524,8 +532,8 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
             <div className="w-full flex justify-center py-2">
               <div
                 ref={invoiceContainerRef}
-                style={{ margin: 0 }}
-                className="w-[340px] max-w-full font-mono text-xs text-[#111613] p-5 border border-dashed border-gray-400 rounded-2xl bg-[#FCFAF7] print:border-none print:p-0 print:w-full print:max-w-none shadow-sm"
+                style={{ margin: 0, width: 340, minWidth: 340, boxSizing: 'border-box' }}
+                className="font-mono text-xs text-[#111613] p-5 border border-dashed border-gray-400 rounded-2xl bg-[#FCFAF7] print:border-none print:p-0 print:w-full print:max-w-none shadow-sm"
               >
                 <div className="text-center space-y-1 pb-3 border-b border-dashed border-gray-400">
                   <div className="font-bold text-base tracking-wider">HATOBA FROZEN FOOD</div>

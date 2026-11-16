@@ -72,7 +72,7 @@ export async function POST(request: Request) {
       paymentMethod: paymentMethod || 'Tunai',
       paymentStatus: paymentStatus || 'LUNAS',
       source: source || 'POS',
-      paidAmount: paidAmount || totalAmount || 0,
+      paidAmount: typeof paidAmount === 'number' ? paidAmount : (totalAmount || 0),
       changeAmount: changeAmount || 0,
       verifiedAt: status === 'VERIFIED' ? new Date().toISOString() : undefined,
       statusNotes: `Dibuat via Kasir POS (${paymentMethod || 'Tunai'})`,
