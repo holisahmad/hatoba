@@ -42,6 +42,7 @@ import {
   CreditCard,
   Check,
   X,
+  Scale,
 } from 'lucide-react'
 import { AdminOrder, AdminProduct, ActivityLog, OrderStatus, OrderItem } from '@/lib/admin-store'
 import OrderPrintModal from '@/components/admin/OrderPrintModal'
@@ -947,6 +948,15 @@ export default function AdminPage() {
               <RefreshCw className={`w-3.5 h-3.5 ${dataLoading ? 'animate-spin' : ''}`} />
               <span className="hidden sm:inline">Refresh</span>
             </button>
+
+            <Link
+              href="/finance"
+              className="p-2 rounded-lg bg-[#C59B47]/10 hover:bg-[#C59B47]/20 border border-[#C59B47]/40 text-[#8C6B24] transition-all text-xs flex items-center gap-1.5 font-bold"
+              title="Buka Portal Mini ERP & Keuangan HATOBA"
+            >
+              <Scale className="w-3.5 h-3.5 text-[#8C6B24]" />
+              <span className="hidden sm:inline">Mini ERP</span>
+            </Link>
 
             <Link
               href="/"
