@@ -1,10 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { CartProvider } from '@/lib/cart-context'
-import Header from '@/components/layout/Header'
-import Footer from '@/components/layout/Footer'
-import CartDrawer from '@/components/commerce/CartDrawer'
-import FloatingCartBar from '@/components/commerce/FloatingCartBar'
+import PublicLayoutWrapper from '@/components/layout/PublicLayoutWrapper'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import {
   getOrganizationSchema,
@@ -100,11 +97,9 @@ export default function RootLayout({
       </head>
       <body className="bg-[#FBF9F5] text-[#111613] antialiased selection:bg-[#C59B47] selection:text-white" suppressHydrationWarning>
         <CartProvider>
-          <Header />
-          {children}
-          <CartDrawer />
-          <FloatingCartBar />
-          <Footer />
+          <PublicLayoutWrapper>
+            {children}
+          </PublicLayoutWrapper>
           <SpeedInsights />
         </CartProvider>
       </body>

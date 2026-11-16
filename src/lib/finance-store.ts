@@ -29,6 +29,7 @@ export const CHART_OF_ACCOUNTS: AccountDef[] = [
   // 4. Pendapatan
   { code: '401', name: 'Pendapatan Penjualan Daging & Jeroan Sapi', type: 'REVENUE', normalBalance: 'CREDIT' },
   { code: '402', name: 'Pendapatan Lain-lain & Non-Operasional', type: 'REVENUE', normalBalance: 'CREDIT' },
+  { code: '403', name: 'Pendapatan Selisih Kas Lebih (Kasir)', type: 'REVENUE', normalBalance: 'CREDIT' },
 
   // 5. HPP (Harga Pokok Penjualan)
   { code: '501', name: 'HPP - Pembelian Daging & Jeroan Sapi', type: 'EXPENSE', normalBalance: 'DEBIT' },
@@ -42,6 +43,7 @@ export const CHART_OF_ACCOUNTS: AccountDef[] = [
   { code: '605', name: 'Beban Pemeliharaan & Service Freezer', type: 'EXPENSE', normalBalance: 'DEBIT' },
   { code: '606', name: 'Beban Promosi & Operasional Marketing', type: 'EXPENSE', normalBalance: 'DEBIT' },
   { code: '607', name: 'Beban Administrasi, Bank & Lainnya', type: 'EXPENSE', normalBalance: 'DEBIT' },
+  { code: '608', name: 'Beban Selisih Kas Kurang (Kasir / Operasional)', type: 'EXPENSE', normalBalance: 'DEBIT' },
 ]
 
 export type FinanceCategory =
@@ -49,6 +51,7 @@ export type FinanceCategory =
   | 'INCOME_AR_COLLECTION'
   | 'INCOME_EQUITY_INJECTION'
   | 'INCOME_OTHER'
+  | 'INCOME_CASH_OVERAGE'
   | 'EXPENSE_MEAT_PURCHASE'
   | 'EXPENSE_FREIGHT_IN'
   | 'EXPENSE_PAY_SUPPLIER'
@@ -61,6 +64,7 @@ export type FinanceCategory =
   | 'EXPENSE_ASSET_PURCHASE'
   | 'EXPENSE_OWNER_DRAW'
   | 'EXPENSE_OTHER'
+  | 'EXPENSE_CASH_SHORTAGE'
 
 export interface CategoryOption {
   key: FinanceCategory
@@ -198,6 +202,22 @@ export const CATEGORY_OPTIONS: Record<FinanceCategory, CategoryOption> = {
     type: 'OUT',
     defaultAccountDebit: '607',
     defaultAccountCredit: '101',
+    cashFlowCategory: 'OPERATING',
+  },
+  INCOME_CASH_OVERAGE: {
+    key: 'INCOME_CASH_OVERAGE',
+    label: 'Selisih Kas Lebih (Kelebihan Uang Fisik Kasir)',
+    type: 'IN',
+    defaultAccountDebit: '101', // Kas di Tangan
+    defaultAccountCredit: '403', // Pendapatan Selisih Kas Lebih
+    cashFlowCategory: 'OPERATING',
+  },
+  EXPENSE_CASH_SHORTAGE: {
+    key: 'EXPENSE_CASH_SHORTAGE',
+    label: 'Selisih Kas Kurang (Beban Selisih Uang Fisik Kasir)',
+    type: 'OUT',
+    defaultAccountDebit: '608', // Beban Selisih Kas Kurang
+    defaultAccountCredit: '101', // Kas di Tangan
     cashFlowCategory: 'OPERATING',
   },
 }
@@ -414,6 +434,110 @@ export async function updateFinanceConfig(config: Partial<InitialCapitalConfig>)
   return cachedConfig
 }
 
+// ==================== CASHIER RECONCILIATION ENGINE ====================
+export interface CashierReconciliation {
+  id: string
+  date: string
+  shiftLabel: string
+  systemCashTotal: number
+  actualCashCounted: number
+  cashDiscrepancy: number
+  systemTransferTotal: number
+  bankVerifiedTotal: number
+  transferDiscrepancy: number
+  status: 'BALANCED' | 'DISCREPANCY_RESOLVED' | 'DISCREPANCY_PENDING'
+  resolutionAction?: 'POTONG_KASIR' | 'BEBAN_PERUSAHAAN' | 'PENDAPATAN_LAIN' | 'SUDAH_COCOK'
+  notes?: string
+  reconciledBy: string
+  reconciledAt: string
+}
+
+let cachedReconciliations: CashierReconciliation[] = [
+  {
+    id: 'REC-20261115-01',
+    date: '2026-11-15',
+    shiftLabel: 'Tutup Kasir Harian 15 Nov 2026',
+    systemCashTotal: 4850000,
+    actualCashCounted: 4850000,
+    cashDiscrepancy: 0,
+    systemTransferTotal: 8320000,
+    bankVerifiedTotal: 8320000,
+    transferDiscrepancy: 0,
+    status: 'BALANCED',
+    resolutionAction: 'SUDAH_COCOK',
+    notes: 'Kasir fisik uang pas Rp 4.850.000, mutasi Bank Mandiri klop 100%.',
+    reconciledBy: 'Finance Lead',
+    reconciledAt: '2026-11-15T21:00:00Z',
+  },
+]
+
+export async function getCashierReconciliations(): Promise<CashierReconciliation[]> {
+  try {
+    const { data, error } = await supabase
+      .from('hatoba_cashier_reconciliations')
+      .select('data')
+      .order('created_at', { ascending: false })
+
+    if (!error && data && data.length > 0) {
+      cachedReconciliations = data.map((d) => d.data as CashierReconciliation)
+    }
+  } catch {
+    // in-memory fallback
+  }
+  return cachedReconciliations
+}
+
+export async function addCashierReconciliation(
+  payload: Omit<CashierReconciliation, 'id' | 'reconciledAt'>
+): Promise<CashierReconciliation> {
+  const newRec: CashierReconciliation = {
+    ...payload,
+    id: `REC-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(100 + Math.random() * 900)}`,
+    reconciledAt: new Date().toISOString(),
+  }
+
+  cachedReconciliations.unshift(newRec)
+
+  // Otomatis buat transaksi keuangan jika ada selisih kas fisik
+  if (newRec.cashDiscrepancy !== 0) {
+    if (newRec.cashDiscrepancy < 0 && newRec.resolutionAction === 'BEBAN_PERUSAHAAN') {
+      await addFinanceTransaction({
+        date: newRec.date,
+        type: 'OUT',
+        category: 'EXPENSE_CASH_SHORTAGE',
+        account: 'KAS',
+        amount: Math.abs(newRec.cashDiscrepancy),
+        recipientOrPayer: `Selisih Kasir (${newRec.shiftLabel})`,
+        notes: `Penyesuaian selisih kas fisik kurang Rp ${Math.abs(newRec.cashDiscrepancy).toLocaleString('id-ID')}`,
+        createdBy: newRec.reconciledBy,
+      })
+    } else if (newRec.cashDiscrepancy > 0) {
+      await addFinanceTransaction({
+        date: newRec.date,
+        type: 'IN',
+        category: 'INCOME_CASH_OVERAGE',
+        account: 'KAS',
+        amount: newRec.cashDiscrepancy,
+        recipientOrPayer: `Selisih Kasir (${newRec.shiftLabel})`,
+        notes: `Kelebihan kas fisik laci kasir Rp ${newRec.cashDiscrepancy.toLocaleString('id-ID')}`,
+        createdBy: newRec.reconciledBy,
+      })
+    }
+  }
+
+  try {
+    await supabase.from('hatoba_cashier_reconciliations').insert({
+      id: newRec.id,
+      created_at: newRec.reconciledAt,
+      data: newRec,
+    })
+  } catch {
+    // in-memory persists
+  }
+
+  return newRec
+}
+
 // ==================== AUTOMATIC DOUBLE-ENTRY JOURNAL ENGINE ====================
 export function generateGeneralJournal(transactions: FinanceTransaction[]): JournalEntry[] {
   return transactions.map((tx) => {
@@ -532,14 +656,23 @@ export interface ComprehensiveFinancialReport {
   cashToDebtRatio: number
   workingCapital: number
   arToSalesRatio: number
+
+  // 9. Kasir POS & Bank Reconciliation Stats
+  posReconciliationStats: {
+    systemTotalCash: number
+    systemTotalTransfer: number
+    systemTotalTempo: number
+    recentReconciliations: CashierReconciliation[]
+  }
 }
 
 export async function computeFinancialReport(): Promise<ComprehensiveFinancialReport> {
-  const [transactions, orders, config, inventory] = await Promise.all([
+  const [transactions, orders, config, inventory, reconciliations] = await Promise.all([
     getFinanceTransactions(),
     getAdminOrders(),
     getFinanceConfig(),
     getInventorySnapshot(),
+    getCashierReconciliations(),
   ])
 
   // --- 1. Kas & Bank Real Calculation ---
@@ -687,6 +820,34 @@ export async function computeFinancialReport(): Promise<ComprehensiveFinancialRe
   const discrepancy = Math.abs(totalAssets - totalLiabilitiesAndEquity)
   const isBalanced = discrepancy < 1000 // toleransi pembulatan
 
+  // --- POS Cashier & Bank Sales Totals ---
+  let systemTotalCash = 0
+  let systemTotalTransfer = 0
+  let systemTotalTempo = 0
+
+  orders.forEach((o) => {
+    if (o.status !== 'REJECTED') {
+      const method = (o.paymentMethod || '').toLowerCase()
+      const paid = o.paidAmount || 0
+      if (o.paymentStatus === 'LUNAS') {
+        if (method.includes('tunai') || method.includes('cash')) {
+          systemTotalCash += o.totalAmount
+        } else {
+          systemTotalTransfer += o.totalAmount
+        }
+      } else if (o.paymentStatus === 'DP') {
+        if (method.includes('tunai') || method.includes('cash')) {
+          systemTotalCash += paid
+        } else {
+          systemTotalTransfer += paid
+        }
+        systemTotalTempo += Math.max(0, o.totalAmount - paid)
+      } else if (o.paymentStatus === 'TEMPO') {
+        systemTotalTempo += o.totalAmount
+      }
+    }
+  })
+
   return {
     realCash: cashBalance,
     realBank: bankBalance,
@@ -741,5 +902,12 @@ export async function computeFinancialReport(): Promise<ComprehensiveFinancialRe
     cashToDebtRatio: accountsPayable > 0 ? (cashBalance + bankBalance) / accountsPayable : 99,
     workingCapital: cashBalance + bankBalance + totalReceivables + endingInv - accountsPayable,
     arToSalesRatio: totalSalesRevenue > 0 ? (totalReceivables / totalSalesRevenue) * 100 : 0,
+
+    posReconciliationStats: {
+      systemTotalCash,
+      systemTotalTransfer,
+      systemTotalTempo,
+      recentReconciliations: reconciliations,
+    },
   }
 }
