@@ -1,5 +1,35 @@
 # CHANGELOG — HATOBA GROUP
 
+## [1.2.0] — 16 November 2026
+
+### Phase 2: Mini ERP & Financial Management Engine
+- **Sub-Sistem Keuangan Mandiri (`/finance`)**:
+  - Login terisolasi via cookie `hatoba_finance_session` dengan PIN Keuangan khusus (`hatoba.finance2026`).
+  - Pintasan navigasi cepat dari panel admin toko (`/admin`) ke portal Mini ERP.
+- **Laporan Keuangan SAK EMKM Lengkap**:
+  - **Laporan Arus Kas (Cash Flow Statement)**: Pemisahan Arus Kas Operasional, Investasi (Freezer), dan Pendanaan (Modal/Prive).
+  - **Neraca Sederhana (Balance Sheet)**: Keseimbangan otomatis Aset (Kas, Piutang, Persediaan Daging Beku, Freezer) vs Kewajiban & Ekuitas (Hutang Supplier, Modal Akhir).
+  - **Laporan Perubahan Modal (Statement of Changes in Equity)**: Perhitungan modal awal, laba bersih berjalan, setoran modal, dan prive pemilik.
+  - **Kalkulator HPP & Stock Opname Freezer**: Form timbang fisik kg freezer untuk memperbarui nilai persediaan dan menghitung HPP riil *(Persediaan Awal + Pembelian Daging − Persediaan Akhir)*.
+  - **Buku Pembantu Piutang Konsumen (AR Aging)**: Terhubung langsung dengan database order penjualan tempo; deteksi jatuh tempo & tombol 1-klik pencairan kas.
+  - **Mesin Jurnal Umum Otomatis (General Ledger Engine)**: Double-entry posting (Debit & Kredit) otomatis di balik layar untuk setiap transaksi kas tanpa membebani staf non-akuntan.
+- **Dokumentasi Lengkap Keuangan & SOP**:
+  - Diterbitkan file resmi `docs/PANDUAN_KEUANGAN_ERP.md` yang memuat:
+    1. Diagnosa masalah perputaran kas HATOBA (*Overtrading & Cash Constrained Growth*).
+    2. Panduan perpajakan UMKM (PP 55/2022 bebas pajak s.d 500jt, 0.5% PPh final, dan status Non-PKP di bawah Rp 4,8 M).
+    3. Formula pembagian Margin Kotor (60-65% kas putar, 15% cadangan freezer, 10% cadangan macet, 10% laba ditahan).
+    4. SOP 4 Buku Pokok dan jadwal Cut-Off mingguan (setiap Jumat sore).
+    5. Chart of Accounts dan panduan operasional sistem bagi staf keuangan.
+
+## [1.1.0] — 16 November 2026
+
+### POS Cashier, Printing Engine & Operations Upgrade
+- Sistem POS 4-Mode Pembayaran: Lunas Tunai/Transfer, DP, Campuran Tunai+Tempo, dan Full Tempo B2B.
+- Fitur cetak nota thermal 58/80mm, invoice tagihan A4, dan surat jalan Delivery Order (DO) berstandar Cold Chain −18°C.
+- Input internal tim marketing (web, pos, admin edit) tanpa ditampilkan di dokumen konsumen.
+- Rekening penampungan personal Mandiri 1370016639326 a.n Doni Kristiawan.
+- Pembakuan terminologi resmi "Cold Chain".
+
 ## [1.0.0] — 12 November 2026
 
 ### Initial Release: Corporate Website & Frozen Food Commerce Platform
