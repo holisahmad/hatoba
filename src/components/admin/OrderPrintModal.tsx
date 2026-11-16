@@ -160,10 +160,10 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
       : ''
 
     const bankPaymentInfo = !isPaid
-      ? `\n*Rekening Pembayaran Resmi HATOBA:*\n• BCA: *772-512-8899* a.n PT HATOBA PANGAN NUSANTARA\n• Mandiri: *137-00-198822-1* a.n HATOBA FROZEN FOOD\n\n*Mohon kirimkan bukti transfer setelah pembayaran dilakukan agar pesanan segera kami jadwalkan pengiriman beku −18°C.*\n`
+      ? `\n*Rekening Pembayaran HATOBA:*\n• Mandiri: *1370016639326* a.n Doni Kristiawan\n\n*Mohon kirimkan bukti transfer setelah pembayaran dilakukan agar pesanan segera kami jadwalkan pengiriman beku −18°C.*\n`
       : ''
 
-    const message = `Halo ${order.customerName},\n\nBerikut rincian ${isPaid ? 'Faktur Lunas / Kuitansi' : 'Faktur Tagihan (Invoice)'} dari *HATOBA Group*:\n\n*Nomor Invoice:* INV-${order.referenceCode}\n*Status:* *${statusText}*\n*Tujuan:* ${order.businessName || order.customerName} (${order.city})\n\n*Rincian Pesanan:*\n${itemsSummary}\n${adjustmentText}\n*Total Tagihan:* *${formatIDR(order.totalAmount)}*\n*Metode:* ${order.paymentMethod || (isPaid ? 'Lunas' : 'Transfer BCA / Mandiri')}\n${dueDateText}${bankPaymentInfo}\nTerima kasih atas kerja samanya. Pesanan Anda diproses dengan standar rantai dingin −18°C.`
+    const message = `Halo ${order.customerName},\n\nBerikut rincian ${isPaid ? 'Faktur Lunas / Kuitansi' : 'Faktur Tagihan (Invoice)'} dari *HATOBA Group*:\n\n*Nomor Invoice:* INV-${order.referenceCode}\n*Status:* *${statusText}*\n*Tujuan:* ${order.businessName || order.customerName} (${order.city})\n\n*Rincian Pesanan:*\n${itemsSummary}\n${adjustmentText}\n*Total Tagihan:* *${formatIDR(order.totalAmount)}*\n*Metode:* ${order.paymentMethod || (isPaid ? 'Lunas' : 'Transfer Mandiri')}\n${dueDateText}${bankPaymentInfo}\nTerima kasih atas kerja samanya. Pesanan Anda diproses dengan standar rantai dingin −18°C.`
 
     const waUrl = `https://wa.me/${targetPhone}?text=${encodeURIComponent(message)}`
     window.open(waUrl, '_blank')
@@ -562,20 +562,17 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
-                  {/* Rekening Pembayaran Resmi */}
+                  {/* Rekening Pembayaran */}
                   <div className="p-3.5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-1 text-xs">
                     <span className="font-bold text-[10px] text-gray-500 uppercase tracking-wider block">
-                      Rekening Resmi HATOBA Group:
+                      Rekening HATOBA Group:
                     </span>
                     <div className="space-y-1 font-mono text-[11px] text-[#111613]">
                       <div>
-                        <span className="font-bold text-[#8C6B24]">BCA:</span> 772-512-8899
-                      </div>
-                      <div>
-                        <span className="font-bold text-[#8C6B24]">Mandiri:</span> 137-00-1928374-1
+                        <span className="font-bold text-[#8C6B24]">Mandiri:</span> 1370016639326
                       </div>
                       <div className="text-[10px] text-gray-600 pt-0.5">
-                        a/n PT HATOBA PANGAN NUSANTARA
+                        a/n Doni Kristiawan
                       </div>
                     </div>
                   </div>

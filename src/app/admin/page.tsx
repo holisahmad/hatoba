@@ -90,7 +90,7 @@ export default function AdminPage() {
   // Payment Management Modal (POS Style: Lunas Tunai/Transfer, DP, Campuran, Tempo)
   const [orderToMarkPaid, setOrderToMarkPaid] = useState<AdminOrder | null>(null)
   const [payMode, setPayMode] = useState<'LUNAS_TRANSFER' | 'LUNAS_TUNAI' | 'DP' | 'CAMPURAN' | 'TEMPO'>('LUNAS_TRANSFER')
-  const [payMethodInput, setPayMethodInput] = useState('Transfer BCA')
+  const [payMethodInput, setPayMethodInput] = useState('Transfer Mandiri')
   const [payAmountInput, setPayAmountInput] = useState('')
   const [payDueDateInput, setPayDueDateInput] = useState('')
   const [payNotesInput, setPayNotesInput] = useState('')
@@ -284,7 +284,7 @@ export default function AdminPage() {
         ? 'Transfer BCA'
         : ord.paymentMethod?.includes('Tunai')
         ? 'Tunai / Cash'
-        : 'Transfer BCA'
+        : 'Transfer Mandiri'
     )
     setPayAmountInput(String(ord.paidAmount || ord.totalAmount))
     setPayDueDateInput(
@@ -2937,7 +2937,7 @@ export default function AdminPage() {
                     type="button"
                     onClick={() => {
                       setPayMode('LUNAS_TRANSFER')
-                      setPayMethodInput('Transfer BCA')
+                      setPayMethodInput('Transfer Mandiri')
                       setPayAmountInput(String(orderToMarkPaid.totalAmount))
                     }}
                     className={`p-2.5 rounded-xl border text-left text-xs transition-all ${
@@ -2949,7 +2949,7 @@ export default function AdminPage() {
                     <div className="font-bold flex items-center gap-1">
                       <span>💳 Transfer Lunas</span>
                     </div>
-                    <div className="text-[10px] text-gray-500 mt-0.5">BCA / Mandiri / QRIS</div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">Mandiri / QRIS</div>
                   </button>
 
                   <button
@@ -2975,7 +2975,7 @@ export default function AdminPage() {
                     type="button"
                     onClick={() => {
                       setPayMode('DP')
-                      setPayMethodInput('Transfer BCA')
+                      setPayMethodInput('Transfer Mandiri')
                       setPayAmountInput(String(Math.round(orderToMarkPaid.totalAmount * 0.3)))
                     }}
                     className={`p-2.5 rounded-xl border text-left text-xs transition-all ${
@@ -3041,8 +3041,7 @@ export default function AdminPage() {
                     onChange={(e) => setPayMethodInput(e.target.value)}
                     className="w-full p-2.5 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs font-semibold focus:outline-none focus:border-emerald-600"
                   >
-                    <option value="Transfer BCA">Transfer BCA (772-512-8899 a.n PT HATOBA PANGAN NUSANTARA)</option>
-                    <option value="Transfer Mandiri">Transfer Mandiri (137-00-198822-1 a.n HATOBA FROZEN FOOD)</option>
+                    <option value="Transfer Mandiri">Transfer Mandiri (1370016639326 a.n Doni Kristiawan)</option>
                     <option value="Transfer Bank Lain">Transfer Bank Lain (Antar Bank)</option>
                     <option value="QRIS">QRIS Standar</option>
                   </select>
@@ -3088,7 +3087,6 @@ export default function AdminPage() {
                         onChange={(e) => setPayMethodInput(e.target.value)}
                         className="w-full p-2.5 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs font-semibold focus:outline-none focus:border-emerald-600"
                       >
-                        <option value="Transfer BCA">Transfer BCA</option>
                         <option value="Transfer Mandiri">Transfer Mandiri</option>
                         <option value="Tunai / Cash">Tunai / Cash</option>
                         <option value="QRIS">QRIS</option>
@@ -3156,7 +3154,7 @@ export default function AdminPage() {
                 </label>
                 <input
                   type="text"
-                  placeholder="Misal: Bukti transfer BCA a.n Hendra jam 14:15, tempo disetujui 7 hari"
+                  placeholder="Misal: Bukti transfer Mandiri a.n Hendra jam 14:15, tempo disetujui 7 hari"
                   value={payNotesInput}
                   onChange={(e) => setPayNotesInput(e.target.value)}
                   className="w-full p-2.5 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs focus:outline-none focus:border-emerald-600"

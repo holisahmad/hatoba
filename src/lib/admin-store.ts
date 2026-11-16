@@ -136,7 +136,7 @@ const INITIAL_ORDERS: AdminOrder[] = [
     totalAmount: 865000,
     status: 'VERIFIED',
     verifiedAt: new Date(Date.now() - 3600000 * 3).toISOString(),
-    statusNotes: 'Pembayaran DP 50% telah diterima via BCA.',
+    statusNotes: 'Pembayaran DP 50% telah diterima via Mandiri.',
   },
   {
     id: 'ord-init-02',
@@ -410,7 +410,7 @@ export async function recordOrderPayment(
       : 'Lunas Tunai'
     description = `Pesanan ${order.referenceCode} (${order.customerName}) Lunas Tunai Rp ${order.totalAmount.toLocaleString('id-ID')}`
   } else if (options.paymentMode === 'LUNAS_TRANSFER') {
-    const method = options.paymentMethod || 'Transfer BCA'
+    const method = options.paymentMethod || 'Transfer Mandiri'
     order.paymentStatus = 'LUNAS'
     order.paymentMethod = method
     order.paidAmount = order.totalAmount
