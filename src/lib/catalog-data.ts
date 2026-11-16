@@ -439,40 +439,81 @@ export const CATALOG_PRODUCTS: ProductItem[] = [
 ]
 
 // Raw materials (Menu Fresh Mentah) - Edisi 2026
-export const RAW_PRODUCTS = [
+export interface RawProductItem {
+  id: string
+  name: string
+  category: string
+  description: string
+  salesMode: 'RAW_INQUIRY'
+  unit: string
+  unitShort: string
+  packagingNote: string
+  image: string
+}
+
+export const RAW_PRODUCTS: RawProductItem[] = [
   {
-    id: 'raw-babat',
-    name: 'Babat Sapi Mentah (Fresh)',
-    category: 'Menu Fresh (Mentah)',
-    description: 'Babat sapi mentah segar untuk restoran dan rumah makan yang memiliki resep dan proses masak sendiri.',
+    id: 'raw-babat-fresh-frozen',
+    name: 'Babat Fresh Frozen',
+    category: 'Bahan Baku Mentah (Fresh Frozen)',
+    description: 'Babat sapi mentah beku segar kualitas premium, bersih higienis tanpa bau, dan siap diolah sesuai resep khas restoran.',
     salesMode: 'RAW_INQUIRY',
     unit: 'Kilogram (Kg)',
+    unitShort: 'Kg',
+    packagingNote: 'Timbangan per Kg (Suhu -18°C)',
+    image: '/images/products/foto-babat.jpeg',
   },
   {
-    id: 'raw-iso',
-    name: 'Iso Sapi Mentah (Fresh)',
-    category: 'Menu Fresh (Mentah)',
-    description: 'Usus sapi mentah segar higienis untuk kebutuhan dapur yang mengolah dari awal.',
+    id: 'raw-paru-fresh-frozen',
+    name: 'Paru Fresh Frozen',
+    category: 'Bahan Baku Mentah (Fresh Frozen)',
+    description: 'Paru sapi mentah segar dalam kemasan dus karton higienis, kualitas stabil dan tekstur padat untuk pasokan rumah makan & katering.',
     salesMode: 'RAW_INQUIRY',
-    unit: 'Kilogram (Kg)',
+    unit: 'Dus (15–20 Kg / Dus)',
+    unitShort: 'Dus',
+    packagingNote: 'Kemasan Dus · Berat 15–20 Kg per Dus',
+    image: '/images/products/foto-paru.jpeg',
   },
   {
-    id: 'raw-paru',
-    name: 'Paru Sapi Mentah (Fresh)',
-    category: 'Menu Fresh (Mentah)',
-    description: 'Paru sapi mentah segar kualitas stabil untuk pasokan rumah makan dan katering.',
+    id: 'raw-iga-fresh-frozen',
+    name: 'Iga Fresh Frozen',
+    category: 'Bahan Baku Mentah (Fresh Frozen)',
+    description: 'Potongan iga sapi mentah berdaging tebal untuk menu sup, konro, iga bakar, atau olahan istimewa restoran.',
     salesMode: 'RAW_INQUIRY',
     unit: 'Kilogram (Kg)',
-  },
-  {
-    id: 'raw-iga',
-    name: 'Iga Sapi Mentah (Fresh)',
-    category: 'Menu Fresh (Mentah)',
-    description: 'Potongan iga sapi mentah berdaging tebal untuk menu sup, konro, atau olahan bakar khas restoran.',
-    salesMode: 'RAW_INQUIRY',
-    unit: 'Kilogram (Kg)',
+    unitShort: 'Kg',
+    packagingNote: 'Timbangan per Kg (Suhu -18°C)',
+    image: '/images/products/foto-iga.jpeg',
   },
 ]
+
+export function formatRawInquiryWhatsApp(
+  items: { name: string; unitShort: string; estQuantity?: string }[],
+  customerInfo?: { name?: string; businessType?: string; city?: string; notes?: string }
+): string {
+  const phone = CORPORATE_CONTACT.phoneClean
+
+  let text = `Halo Admin HATOBA Group, saya ingin menanyakan ketersediaan stok & pricelist hari ini untuk produk mentah fresh frozen:\n\n`
+  items.forEach((it, idx) => {
+    const qtyText = it.estQuantity && it.estQuantity.trim() ? ` [Estimasi: ${it.estQuantity.trim()}]` : ''
+    text += `${idx + 1}. *${it.name}* (Satuan: ${it.unitShort})${qtyText}\n`
+  })
+
+  if (customerInfo?.name || customerInfo?.city || customerInfo?.businessType) {
+    text += `\n*Data Pemesan:*\n`
+    if (customerInfo.name) text += `• Nama: ${customerInfo.name.trim()}\n`
+    if (customerInfo.businessType) text += `• Usaha: ${customerInfo.businessType.trim()}\n`
+    if (customerInfo.city) text += `• Kota/Tujuan: ${customerInfo.city.trim()}\n`
+  }
+
+  if (customerInfo?.notes && customerInfo.notes.trim()) {
+    text += `\n*Catatan Khusus:* ${customerInfo.notes.trim()}\n`
+  }
+
+  text += `\nMohon info penawaran harga terbaik hari ini dan jadwal ketersediaan stok di cold storage. Terima kasih!`
+
+  return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`
+}
 
 export const CORPORATE_CONTACT = {
   phone: '+62 821-7368-358',

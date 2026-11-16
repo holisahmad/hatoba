@@ -7,6 +7,9 @@ export interface OrderItem {
   quantity: number
   unitPrice: number
   subtotal: number
+  unit?: string // 'pack' | 'kg' | 'dus' | string
+  notes?: string
+  isRawProduct?: boolean
 }
 
 export type OrderStatus = 'PENDING' | 'VERIFIED' | 'REJECTED'

@@ -19,8 +19,11 @@ import {
   Clock,
   Printer,
   ShoppingBag,
+  Scale,
+  X,
 } from 'lucide-react'
 import { AdminProduct, AdminOrder } from '@/lib/admin-store'
+import { RAW_PRODUCTS } from '@/lib/catalog-data'
 
 interface PosCartItem {
   productId: string
@@ -32,6 +35,9 @@ interface PosCartItem {
   isPartai?: boolean
   quantity: number
   subtotal: number
+  unit?: string
+  isRawProduct?: boolean
+  notes?: string
 }
 
 interface PosCashierTabProps {
@@ -76,6 +82,59 @@ export default function PosCashierTab({
   const [loading, setLoading] = useState(false)
   const [historyFilter, setHistoryFilter] = useState<'POS' | 'ALL'>('POS')
   const [isRefreshingHistory, setIsRefreshingHistory] = useState(false)
+
+  // Raw Product (Nego WA) state
+  const [showRawModal, setShowRawModal] = useState(false)
+  const [rawProductName, setRawProductName] = useState('Babat Fresh Frozen')
+  const [rawCustomProductName, setRawCustomProductName] = useState('')
+  const [rawUnit, setRawUnit] = useState<string>('Kg')
+  const [rawQty, setRawQty] = useState('')
+  const [rawUnitPrice, setRawUnitPrice] = useState('')
+  const [rawItemNote, setRawItemNote] = useState('')
+
+  const handleAddRawProductToCart = (e: React.FormEvent) => {
+    e.preventDefault()
+    const targetName = rawProductName === 'Lainnya' ? rawCustomProductName.trim() : rawProductName
+    if (!targetName) {
+      showToast('Nama produk mentah wajib diisi.', 'error')
+      return
+    }
+
+    const parsedQty = parseFloat(rawQty)
+    if (isNaN(parsedQty) || parsedQty <= 0) {
+      showToast('Kuantitas / timbangan harus berupa angka lebih dari 0.', 'error')
+      return
+    }
+
+    const cleanPrice = parseFloat(rawUnitPrice.replace(/[^0-9]/g, ''))
+    if (isNaN(cleanPrice) || cleanPrice <= 0) {
+      showToast('Harga kesepakatan nego harus lebih dari Rp 0.', 'error')
+      return
+    }
+
+    const subtotal = Math.round(parsedQty * cleanPrice)
+    const newItem: PosCartItem = {
+      productId: `raw-${Date.now()}`,
+      productName: targetName,
+      variantId: `nego-${Date.now()}`,
+      variantName: `Nego (${rawUnit})`,
+      unitPrice: cleanPrice,
+      basePrice: cleanPrice,
+      quantity: parsedQty,
+      subtotal,
+      unit: rawUnit,
+      isRawProduct: true,
+      notes: rawItemNote.trim() || undefined,
+    }
+
+    setCart((prev) => [...prev, newItem])
+    setShowRawModal(false)
+    setRawQty('')
+    setRawUnitPrice('')
+    setRawItemNote('')
+    setRawCustomProductName('')
+    showToast(`${targetName} (${parsedQty} ${rawUnit}) berhasil ditambahkan ke keranjang POS.`, 'success')
+  }
 
   // Calculations
   const rawSubtotal = cart.reduce((sum, it) => sum + it.subtotal, 0)
@@ -162,6 +221,15 @@ export default function PosCashierTab({
       const newQty = curr.quantity + delta
       if (newQty <= 0) {
         return next.filter((_, i) => i !== index)
+      }
+
+      if (curr.isRawProduct) {
+        next[index] = {
+          ...curr,
+          quantity: newQty,
+          subtotal: Math.round(newQty * curr.unitPrice),
+        }
+        return next
       }
 
       const prod = products.find((p) => p.id === curr.productId)
@@ -292,6 +360,9 @@ export default function PosCashierTab({
           quantity: c.quantity,
           unitPrice: c.unitPrice,
           subtotal: c.subtotal,
+          unit: c.unit,
+          isRawProduct: c.isRawProduct,
+          notes: c.notes,
         })),
         totalAmount: finalTotal,
         paymentMethod: displayMethodForDB,
@@ -358,6 +429,34 @@ export default function PosCashierTab({
               className="w-full pl-9 pr-3 py-2 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs text-[#111613] focus:outline-none focus:border-[#C59B47] focus:bg-white transition-all"
             />
           </div>
+        </div>
+
+        {/* Quick Action: Input Produk Mentah Hasil Nego WA */}
+        <div className="bg-gradient-to-r from-[#FAF6EE] to-[#F5EFE6] border border-[#E2D6C5] p-3.5 sm:p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-800 text-white flex items-center justify-center flex-shrink-0 shadow-sm">
+              <Scale className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="font-bold text-sm text-[#111613] flex items-center gap-2">
+                <span>Produk Mentah Fresh Frozen (Harga Nego)</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-200/70 text-amber-900 font-bold">
+                  B2B Nego
+                </span>
+              </div>
+              <p className="text-[11px] text-[#5C6E65]">
+                Babat (Kg), Paru (Dus 15-20kg), Iga (Kg) dengan harga &amp; satuan hasil kesepakatan chat WA.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowRawModal(true)}
+            className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Input Produk Mentah / Nego</span>
+          </button>
         </div>
 
         {/* Product Grid */}
@@ -551,9 +650,19 @@ export default function PosCashierTab({
                     className="p-2.5 rounded-xl bg-[#FCFAF7] border border-[#EAE4DC] flex items-center justify-between gap-2 text-xs"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="font-semibold text-[#111613] truncate">{it.productName}</div>
+                      <div className="font-semibold text-[#111613] truncate flex items-center gap-1.5">
+                        <span>{it.productName}</span>
+                        {it.isRawProduct && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-bold uppercase whitespace-nowrap">
+                            Nego ({it.unit || 'Kg'})
+                          </span>
+                        )}
+                      </div>
                       <div className="text-[10px] text-gray-500 truncate flex items-center gap-1">
                         <span>{it.variantName}</span>
+                        {it.notes && (
+                          <span className="text-[9px] text-gray-600 italic">· {it.notes}</span>
+                        )}
                         {(it.isPartai || it.variantId.includes('partai')) && it.quantity >= 5 && (
                           <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1 rounded">
                             Diskon Rp 10rb/pk
@@ -561,7 +670,7 @@ export default function PosCashierTab({
                         )}
                       </div>
                       <div className="font-mono text-emerald-800 font-bold">
-                        {formatIDR(it.unitPrice)}
+                        {formatIDR(it.unitPrice)} {it.unit ? `/ ${it.unit}` : ''}
                       </div>
                     </div>
 
@@ -573,8 +682,8 @@ export default function PosCashierTab({
                       >
                         <Minus className="w-3 h-3" />
                       </button>
-                      <span className="font-mono font-bold w-6 text-center text-xs">
-                        {it.quantity}
+                      <span className="font-mono font-bold px-1 text-center text-xs whitespace-nowrap">
+                        {it.quantity} {it.unit ? it.unit : ''}
                       </span>
                       <button
                         type="button"
@@ -1088,6 +1197,177 @@ export default function PosCashierTab({
           )
         })()}
       </div>
+
+      {/* MODAL INPUT PRODUK MENTAH / NEGO */}
+      {showRawModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-stone-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-[#FAF6F0] border border-[#E2D6C5] flex items-center justify-center text-amber-800">
+                  <Scale className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-serif-title font-bold text-lg text-[#111613]">
+                    Input Produk Mentah / Harga Nego
+                  </h3>
+                  <p className="text-[11px] text-[#5C6E65]">
+                    Invoice produk mentah dengan satuan &amp; harga kesepakatan via chat WA.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRawModal(false)}
+                className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddRawProductToCart} className="space-y-4 pt-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Pilih Produk Mentah: *
+                </label>
+                <select
+                  value={rawProductName}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setRawProductName(val)
+                    if (val === 'Babat Fresh Frozen' || val === 'Iga Fresh Frozen') {
+                      setRawUnit('Kg')
+                    } else if (val === 'Paru Fresh Frozen') {
+                      setRawUnit('Dus')
+                    }
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF8F5] border border-gray-300 text-xs text-[#111613] font-semibold focus:outline-none focus:border-amber-600 focus:bg-white"
+                >
+                  <option value="Babat Fresh Frozen">Babat Fresh Frozen (Default: Kg)</option>
+                  <option value="Paru Fresh Frozen">Paru Fresh Frozen (Default: Dus 15–20 Kg)</option>
+                  <option value="Iga Fresh Frozen">Iga Fresh Frozen (Default: Kg)</option>
+                  <option value="Lainnya">Produk Mentah Lainnya (Custom Input)</option>
+                </select>
+              </div>
+
+              {rawProductName === 'Lainnya' && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Nama Produk Mentah Custom: *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: Lidah Sapi Frozen / Buntut Sapi"
+                    value={rawCustomProductName}
+                    onChange={(e) => setRawCustomProductName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF8F5] border border-gray-300 text-xs text-[#111613] focus:outline-none focus:border-amber-600 focus:bg-white"
+                  />
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Satuan Penjualan: *
+                  </label>
+                  <select
+                    value={rawUnit}
+                    onChange={(e) => setRawUnit(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF8F5] border border-gray-300 text-xs text-[#111613] font-semibold focus:outline-none focus:border-amber-600 focus:bg-white"
+                  >
+                    <option value="Kg">Kilogram (Kg)</option>
+                    <option value="Dus">Dus (Karton)</option>
+                    <option value="Pack">Pack</option>
+                    <option value="Ekor">Ekor / Bagian</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Kuantitas / Timbangan: *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    required
+                    placeholder="Contoh: 37.5 atau 2"
+                    value={rawQty}
+                    onChange={(e) => setRawQty(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#FAF8F5] border border-gray-300 text-xs font-mono font-bold text-[#111613] focus:outline-none focus:border-amber-600 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Harga Kesepakatan Nego (Rp/{rawUnit}): *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-500">
+                    Rp
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: 75.000"
+                    value={rawUnitPrice}
+                    onChange={(e) => setRawUnitPrice(e.target.value)}
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-[#FAF8F5] border border-gray-300 text-xs font-mono font-bold text-[#111613] focus:outline-none focus:border-amber-600 focus:bg-white"
+                  />
+                </div>
+                <p className="text-[10px] text-gray-500 mt-1">
+                  Harga kesepakatan harian per {rawUnit} hasil komunikasi dengan konsumen.
+                </p>
+              </div>
+
+              {/* Subtotal Calculation Preview */}
+              <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200 flex items-center justify-between text-xs">
+                <span className="text-amber-900 font-semibold">Subtotal Terhitung:</span>
+                <span className="font-mono font-black text-amber-950 text-base">
+                  {formatIDR(
+                    Math.round(
+                      (parseFloat(rawQty) || 0) *
+                      (parseFloat(rawUnitPrice.replace(/[^0-9]/g, '')) || 0)
+                    )
+                  )}
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Catatan / Keterangan Nego: <span className="text-gray-400 font-normal">(Opsional)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Kesepakatan via WA Bpk. Hendra @ Rp 75rb/kg"
+                  value={rawItemNote}
+                  onChange={(e) => setRawItemNote(e.target.value)}
+                  className="w-full px-3.5 py-2 rounded-xl bg-[#FAF8F5] border border-gray-300 text-xs text-[#111613] focus:outline-none focus:border-amber-600 focus:bg-white"
+                />
+              </div>
+
+              <div className="flex items-center gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowRawModal(false)}
+                  className="flex-1 py-3 rounded-xl border border-gray-300 text-gray-700 text-xs font-bold hover:bg-gray-50 transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-3 rounded-xl bg-amber-800 hover:bg-amber-900 text-white text-xs font-bold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Tambahkan ke Kasir</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

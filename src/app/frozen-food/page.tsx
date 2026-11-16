@@ -14,12 +14,15 @@ import {
   FileText,
   Clock,
   Phone,
+  CheckSquare,
+  Square,
 } from 'lucide-react'
 import {
   CATALOG_PRODUCTS,
   RAW_PRODUCTS,
   CORPORATE_CONTACT,
   FOOTPRINT_LOCATIONS,
+  formatRawInquiryWhatsApp,
 } from '@/lib/catalog-data'
 import ProductCard from '@/components/commerce/ProductCard'
 import PartnerShowcase from '@/components/corporate/PartnerShowcase'
@@ -27,7 +30,16 @@ import { getStoredAttribution } from '@/lib/attribution'
 
 export default function FrozenFoodPage() {
   const [products, setProducts] = useState(CATALOG_PRODUCTS)
-  const [selectedRaw, setSelectedRaw] = useState(RAW_PRODUCTS[0].name)
+  const [selectedRawIds, setSelectedRawIds] = useState<string[]>([
+    'raw-babat-fresh-frozen',
+    'raw-paru-fresh-frozen',
+    'raw-iga-fresh-frozen',
+  ])
+  const [rawEstQty, setRawEstQty] = useState<{ [id: string]: string }>({
+    'raw-babat-fresh-frozen': '25 Kg',
+    'raw-paru-fresh-frozen': '2 Dus',
+    'raw-iga-fresh-frozen': '30 Kg',
+  })
 
   useEffect(() => {
     fetch('/api/admin/products')
@@ -39,13 +51,22 @@ export default function FrozenFoodPage() {
       })
       .catch(() => {})
   }, [])
+
   const [rawName, setRawName] = useState('')
   const [rawPhone, setRawPhone] = useState('')
   const [rawBusinessType, setRawBusinessType] = useState('Restoran / Rumah Makan')
   const [rawCity, setRawCity] = useState('')
-  const [rawQuantity, setRawQuantity] = useState('')
   const [rawNotes, setRawNotes] = useState('')
   const [rawMarketingName, setRawMarketingName] = useState('')
+
+  const toggleRawSelect = (id: string) => {
+    if (selectedRawIds.includes(id)) {
+      if (selectedRawIds.length === 1) return
+      setSelectedRawIds(selectedRawIds.filter((item) => item !== id))
+    } else {
+      setSelectedRawIds([...selectedRawIds, id])
+    }
+  }
 
   const [loading, setLoading] = useState(false)
   const [feedback, setFeedback] = useState<{
@@ -56,10 +77,18 @@ export default function FrozenFoodPage() {
 
   const handleRawSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!rawName || !rawPhone || !rawCity || !rawQuantity) {
+    if (selectedRawIds.length === 0) {
       setFeedback({
         type: 'error',
-        text: 'Mohon isi Nama, WhatsApp, Kota, dan Estimasi Kebutuhan.',
+        text: 'Pilih minimal 1 produk mentah yang ingin ditanyakan.',
+      })
+      return
+    }
+
+    if (!rawName || !rawPhone || !rawCity) {
+      setFeedback({
+        type: 'error',
+        text: 'Mohon lengkapi Nama, Nomor WhatsApp, dan Kota Tujuan.',
       })
       return
     }
@@ -67,9 +96,27 @@ export default function FrozenFoodPage() {
     setLoading(true)
     setFeedback(null)
 
+    const selectedProducts = RAW_PRODUCTS.filter((r) => selectedRawIds.includes(r.id)).map((r) => ({
+      name: r.name,
+      unitShort: r.unitShort,
+      estQuantity: rawEstQty[r.id] || '',
+    }))
+
+    const waUrl = formatRawInquiryWhatsApp(selectedProducts, {
+      name: rawName,
+      businessType: rawBusinessType,
+      city: rawCity,
+      notes: rawNotes,
+    })
+
     try {
       const attribution = getStoredAttribution()
-      const res = await fetch('/api/lead', {
+      const productNamesSummary = selectedProducts.map((p) => p.name).join(', ')
+      const estimatedQuantitySummary = selectedProducts
+        .map((p) => `${p.name}: ${p.estQuantity || 'Sesuai Stok'}`)
+        .join('; ')
+
+      fetch('/api/lead', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -79,36 +126,29 @@ export default function FrozenFoodPage() {
             businessType: rawBusinessType,
             phone: rawPhone,
             city: rawCity,
-            productRequested: selectedRaw,
-            estimatedQuantity: rawQuantity,
+            productRequested: productNamesSummary,
+            estimatedQuantity: estimatedQuantitySummary,
             marketingName: rawMarketingName || undefined,
             notes: rawNotes,
           },
           attribution,
         }),
-      })
-
-      const data = await res.json()
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Gagal mengirim formulir inquiry.')
-      }
+      }).catch(() => {})
 
       setFeedback({
         type: 'success',
-        text: `Inquiry berhasil dicatat dengan Nomor Referensi: ${data.referenceCode}. Mengarahkan ke WhatsApp sales...`,
-        whatsappUrl: data.whatsappUrl,
+        text: `Mengarahkan ke WhatsApp Admin untuk konfirmasi stok & pricelist hari ini...`,
+        whatsappUrl: waUrl,
       })
 
-      if (data.whatsappUrl) {
-        setTimeout(() => {
-          window.open(data.whatsappUrl, '_blank')
-        }, 1200)
-      }
+      setTimeout(() => {
+        window.open(waUrl, '_blank')
+      }, 500)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Terjadi kendala teknis.'
       setFeedback({
         type: 'error',
-        text: `${msg} Silakan kontak manual via WhatsApp di ${CORPORATE_CONTACT.phone}`,
+        text: `${msg} Silakan hubungi langsung WhatsApp kami: ${CORPORATE_CONTACT.phone}`,
       })
     } finally {
       setLoading(false)
@@ -217,10 +257,10 @@ export default function FrozenFoodPage() {
                   >
                     <div>
                       <span className="font-bold text-[#111613] block">{raw.name}</span>
-                      <span className="text-[#5C6E65]">{raw.category}</span>
+                      <span className="text-[#5C6E65] text-[11px]">{raw.packagingNote}</span>
                     </div>
-                    <span className="text-[11px] font-mono text-[#8C6B24] bg-[#F5EFE6] px-2.5 py-1 rounded border border-[#E2D6C5]">
-                      Inquiry B2B
+                    <span className="text-[11px] font-mono font-bold text-[#8C6B24] bg-[#F5EFE6] px-2.5 py-1 rounded border border-[#E2D6C5]">
+                      Satuan: {raw.unitShort}
                     </span>
                   </div>
                 ))}
@@ -264,29 +304,74 @@ export default function FrozenFoodPage() {
 
               <form onSubmit={handleRawSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-[#8C6B24] mb-1">
-                    Pilih Bahan Baku yang Diminta: *
-                  </label>
-                  <select
-                    value={selectedRaw}
-                    onChange={(e) => setSelectedRaw(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-[#111613] text-xs focus:outline-none focus:border-[#C59B47] focus:bg-white"
-                  >
-                    {RAW_PRODUCTS.map((r) => (
-                      <option key={r.id} value={r.name} className="bg-white text-[#111613]">
-                        {r.name} ({r.unit})
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-bold text-[#8C6B24]">
+                      Pilih Produk Mentah yang Ingin Ditanyakan: *
+                    </label>
+                    <span className="text-[11px] text-gray-500 font-medium">
+                      Bisa pilih lebih dari satu
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {RAW_PRODUCTS.map((raw) => {
+                      const isSelected = selectedRawIds.includes(raw.id)
+                      return (
+                        <div
+                          key={raw.id}
+                          onClick={() => toggleRawSelect(raw.id)}
+                          className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
+                            isSelected
+                              ? 'bg-[#FAF6EE] border-[#8C6B24] shadow-sm ring-1 ring-[#8C6B24]/30'
+                              : 'bg-[#FAF8F5] border-gray-200 hover:border-gray-300 opacity-80'
+                          }`}
+                        >
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-full bg-white border border-gray-300 text-gray-700">
+                                {raw.unitShort}
+                              </span>
+                              <div className="text-amber-800">
+                                {isSelected ? (
+                                  <CheckSquare className="w-4 h-4 text-amber-800" />
+                                ) : (
+                                  <Square className="w-4 h-4 text-gray-400" />
+                                )}
+                              </div>
+                            </div>
+                            <h4 className="font-serif-title text-sm font-bold text-[#111613] leading-snug">
+                              {raw.name}
+                            </h4>
+                            <p className="text-[10px] text-gray-500 leading-tight line-clamp-2">
+                              {raw.packagingNote}
+                            </p>
+                          </div>
+
+                          <div className="pt-2 mt-2 border-t border-dashed border-gray-200" onClick={(e) => e.stopPropagation()}>
+                            <label className="block text-[10px] font-bold text-gray-600 mb-1">
+                              Estimasi Qty:
+                            </label>
+                            <input
+                              type="text"
+                              value={rawEstQty[raw.id] || ''}
+                              onChange={(e) => setRawEstQty({ ...rawEstQty, [raw.id]: e.target.value })}
+                              placeholder={raw.unitShort === 'Dus' ? 'Contoh: 2 Dus' : 'Contoh: 25 Kg'}
+                              className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-gray-300 text-xs font-mono font-bold text-[#111613] focus:outline-none focus:border-amber-600"
+                            />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                   <div>
-                    <label className="block text-xs text-[#48564F] mb-1">Nama Pemohon: *</label>
+                    <label className="block text-xs text-[#48564F] mb-1">Nama Pemohon / Usaha: *</label>
                     <input
                       type="text"
                       required
-                      placeholder="Nama Lengkap"
+                      placeholder="Contoh: RM Padang Minang / Ibu Siti"
                       value={rawName}
                       onChange={(e) => setRawName(e.target.value)}
                       className="w-full px-4 py-3 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-[#111613] text-xs focus:outline-none focus:border-[#C59B47] focus:bg-white"
@@ -307,11 +392,10 @@ export default function FrozenFoodPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs text-[#48564F] mb-1">Jenis Usaha: *</label>
+                    <label className="block text-xs text-[#48564F] mb-1">Jenis Usaha:</label>
                     <input
                       type="text"
-                      required
-                      placeholder="Restoran / Hotel / Katering"
+                      placeholder="Restoran / Hotel / Katering / Reseller"
                       value={rawBusinessType}
                       onChange={(e) => setRawBusinessType(e.target.value)}
                       className="w-full px-4 py-3 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-[#111613] text-xs focus:outline-none focus:border-[#C59B47] focus:bg-white"
@@ -322,26 +406,12 @@ export default function FrozenFoodPage() {
                     <input
                       type="text"
                       required
-                      placeholder="Denpasar / Yogyakarta"
+                      placeholder="Contoh: Denpasar / Yogyakarta / Semarang"
                       value={rawCity}
                       onChange={(e) => setRawCity(e.target.value)}
                       className="w-full px-4 py-3 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-[#111613] text-xs focus:outline-none focus:border-[#C59B47] focus:bg-white"
                     />
                   </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs text-[#48564F] mb-1">
-                    Estimasi Jumlah & Satuan Kebutuhan: *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: 50 kg per minggu / 200 kg kontrak bulanan"
-                    value={rawQuantity}
-                    onChange={(e) => setRawQuantity(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-[#111613] text-xs focus:outline-none focus:border-[#C59B47] focus:bg-white"
-                  />
                 </div>
 
                 <div>
@@ -361,10 +431,10 @@ export default function FrozenFoodPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs text-[#48564F] mb-1">Spesifikasi Tambahan:</label>
+                  <label className="block text-xs text-[#48564F] mb-1">Catatan Tambahan / Spesifikasi Potongan:</label>
                   <textarea
-                    rows={3}
-                    placeholder="Contoh: Ketebalan potong, preferensi pengemasan curah, jadwal kirim subuh..."
+                    rows={2}
+                    placeholder="Contoh: Kebutuhan rutin mingguan, jadwal kirim cold chain pagi..."
                     value={rawNotes}
                     onChange={(e) => setRawNotes(e.target.value)}
                     className="w-full px-4 py-3 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-[#111613] text-xs focus:outline-none focus:border-[#C59B47] focus:bg-white placeholder:text-gray-400"
@@ -374,15 +444,15 @@ export default function FrozenFoodPage() {
                 <div className="pt-2">
                   <button
                     type="submit"
-                    disabled={loading}
-                    className="w-full py-4 rounded-full font-bold text-white bg-crimson hover:bg-crimson-hover transition-all shadow-lg shadow-crimson/30 hover:shadow-crimson/50 flex items-center justify-center gap-2 disabled:opacity-50 text-xs"
+                    disabled={loading || selectedRawIds.length === 0}
+                    className="w-full py-4 rounded-xl font-bold text-white bg-crimson hover:bg-crimson-hover transition-all shadow-lg shadow-crimson/30 hover:shadow-crimson/50 flex items-center justify-center gap-2 disabled:opacity-50 text-xs sm:text-sm cursor-pointer"
                   >
                     {loading ? (
-                      <span className="animate-pulse">Menyiapkan Penawaran...</span>
+                      <span className="animate-pulse">Menghubungkan ke Admin...</span>
                     ) : (
                       <>
                         <Send className="w-4 h-4" />
-                        <span>Chat Admin untuk Penawaran (WhatsApp)</span>
+                        <span>Tanya Stok &amp; Pricelist via WhatsApp ({selectedRawIds.length} Produk Terpilih)</span>
                       </>
                     )}
                   </button>

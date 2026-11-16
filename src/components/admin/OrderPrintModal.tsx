@@ -185,7 +185,7 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
       : 'MENUNGGU PEMBAYARAN (TAGIHAN)'
 
     const itemsSummary = order.items
-      .map((it) => `• ${it.productName} (${it.variantName}) — ${it.quantity} pack = ${formatIDR(it.subtotal)}`)
+      .map((it) => `• ${it.productName} (${it.variantName}) — ${it.quantity} ${it.unit ?? 'pack'} = ${formatIDR(it.subtotal)}`)
       .join('\n')
 
     const adjustmentText = order.adjustmentNotes
@@ -581,7 +581,7 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
                         <td className="p-2.5 text-center font-mono text-gray-500">{idx + 1}</td>
                         <td className="p-2.5 font-semibold text-[#111613]">{it.productName}</td>
                         <td className="p-2.5 text-gray-600">{it.variantName}</td>
-                        <td className="p-2.5 text-center font-mono font-bold">{it.quantity}x</td>
+                        <td className="p-2.5 text-center font-mono font-bold">{it.quantity} {it.unit ? it.unit : 'pk'}</td>
                         <td className="p-2.5 text-right font-mono text-gray-700">
                           {formatIDR(it.unitPrice)}
                         </td>
@@ -842,7 +842,7 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
                     <div className="flex justify-between text-gray-600 text-[10px]">
                       <span>{it.variantName}</span>
                       <span>
-                        {it.quantity} x {formatIDR(it.unitPrice)}
+                        {it.quantity} {it.unit ? it.unit : 'pk'} x {formatIDR(it.unitPrice)}
                       </span>
                     </div>
                     <div className="text-right font-bold">{formatIDR(it.subtotal)}</div>
@@ -1006,7 +1006,7 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
                         </td>
                         <td className="border border-gray-400 p-2 text-gray-700">{it.variantName}</td>
                         <td className="border border-gray-400 p-2 text-center font-mono font-bold text-sm">
-                          {it.quantity} pack
+                          {it.quantity} {it.unit ?? 'pack'}
                         </td>
                         <td className="border border-gray-400 p-2 text-center text-[10px] text-emerald-800 font-semibold print:text-black">
                           ✓ Beku −18°C Segel
@@ -1027,7 +1027,7 @@ export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPri
                         Total Kuantitas Kirim:
                       </td>
                       <td className="border border-gray-400 p-2 text-center font-mono text-sm text-[#8C6B24] print:text-black">
-                        {order.items.reduce((acc, it) => acc + it.quantity, 0)} pack
+                        {order.items.reduce((acc, it) => acc + it.quantity, 0)} {order.items.some(it => it.unit && it.unit.toLowerCase() !== 'pack') ? 'unit' : 'pack'}
                       </td>
                       <td colSpan={2} className="border border-gray-400 p-2 text-[10px] text-gray-600 print:text-black">
                         * Konsumen memberi tanda centang [ ✔ ] pada kotak untuk memastikan barang fisik telah sesuai
