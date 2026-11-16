@@ -32,10 +32,38 @@ import {
   Camera,
   ImageIcon,
   Receipt,
+  Users,
+  UserCheck,
+  HeartHandshake,
+  Gift,
+  Tag,
+  MessageSquare,
+  Send,
+  CreditCard,
+  Check,
 } from 'lucide-react'
 import { AdminOrder, AdminProduct, ActivityLog, OrderStatus, OrderItem } from '@/lib/admin-store'
 import OrderPrintModal from '@/components/admin/OrderPrintModal'
 import PosCashierTab from '@/components/admin/PosCashierTab'
+
+export interface CustomerProfile {
+  id: string
+  name: string
+  phone: string
+  businessName: string
+  businessType: string
+  city: string
+  hubArea: string
+  totalOrders: number
+  totalSpent: number
+  lastOrderDate: string
+  daysSinceLastOrder: number
+  itemsBought: { name: string; totalQty: number }[]
+  loyaltyTier: 'VIP' | 'REGULAR' | 'NEW'
+  loyaltyLabel: string
+  orders: AdminOrder[]
+  needsFollowUp: boolean
+}
 
 export default function AdminPage() {
   // Auth state
@@ -45,7 +73,7 @@ export default function AdminPage() {
   const [loginLoading, setLoginLoading] = useState(false)
 
   // Navigation tab
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'orders' | 'menu' | 'logs'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'orders' | 'customers' | 'menu' | 'logs'>('dashboard')
 
   // Data states
   const [orders, setOrders] = useState<AdminOrder[]>([])
@@ -57,6 +85,21 @@ export default function AdminPage() {
   const [orderStatusFilter, setOrderStatusFilter] = useState<'ALL' | OrderStatus>('ALL')
   const [orderSearchQuery, setOrderSearchQuery] = useState('')
   const [selectedOrderForPrint, setSelectedOrderForPrint] = useState<AdminOrder | null>(null)
+
+  // Mark as Paid (LUNAS) Modal
+  const [orderToMarkPaid, setOrderToMarkPaid] = useState<AdminOrder | null>(null)
+  const [payMethodInput, setPayMethodInput] = useState('Transfer BCA')
+  const [payNotesInput, setPayNotesInput] = useState('')
+  const [payLoading, setPayLoading] = useState(false)
+
+  // Customer CRM (Database Pelanggan)
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('')
+  const [customerTierFilter, setCustomerTierFilter] = useState<'ALL' | 'VIP' | 'REGULAR' | 'NEW'>('ALL')
+  const [customerHubFilter, setCustomerHubFilter] = useState<'ALL' | 'Bali' | 'Yogyakarta'>('ALL')
+  const [customerFollowUpFilter, setCustomerFollowUpFilter] = useState<'ALL' | 'NEED_FOLLOWUP' | 'RECENT'>('ALL')
+  const [selectedCustomerForFollowUp, setSelectedCustomerForFollowUp] = useState<CustomerProfile | null>(null)
+  const [followUpTemplate, setFollowUpTemplate] = useState<'APPRECIATION_DISCOUNT' | 'RESTOCK_REMINDER' | 'GROSIR_OFFER' | 'CUSTOM'>('APPRECIATION_DISCOUNT')
+  const [customFollowUpMessage, setCustomFollowUpMessage] = useState('')
 
   // Menu modal (Add / Edit)
   const [isMenuModalOpen, setIsMenuModalOpen] = useState(false)
@@ -214,6 +257,52 @@ export default function AdminPage() {
       }
     } catch {
       alert('Gagal memperbarui status order.')
+    }
+  }
+
+  // Handle Confirm Mark as Paid (LUNAS)
+  const handleConfirmMarkPaid = async () => {
+    if (!orderToMarkPaid) return
+    setPayLoading(true)
+    try {
+      const res = await fetch('/api/admin/orders', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          referenceCode: orderToMarkPaid.referenceCode,
+          action: 'MARK_PAID',
+          paymentMethod: payMethodInput,
+          paidAmount: orderToMarkPaid.totalAmount,
+          notes: payNotesInput.trim() || undefined,
+          adminUser: 'Admin Keuangan',
+        }),
+      })
+
+      const data = await res.json()
+      if (res.ok && data.success && data.order) {
+        showToast(
+          `Pesanan ${orderToMarkPaid.referenceCode} berhasil ditandai LUNAS via ${payMethodInput}!`,
+          'success'
+        )
+        setOrders((prev) =>
+          prev.map((o) => (o.referenceCode === orderToMarkPaid.referenceCode ? data.order : o))
+        )
+        if (selectedOrderForPrint?.referenceCode === orderToMarkPaid.referenceCode) {
+          setSelectedOrderForPrint(data.order)
+        }
+        setOrderToMarkPaid(null)
+        setPayNotesInput('')
+        // Refresh logs
+        const logsRes = await fetch('/api/admin/logs')
+        const logsData = await logsRes.json()
+        if (logsData.logs) setLogs(logsData.logs)
+      } else {
+        showToast(data.error || 'Gagal mengubah status pembayaran.', 'error')
+      }
+    } catch {
+      showToast('Terjadi kesalahan jaringan saat memproses pelunasan.', 'error')
+    } finally {
+      setPayLoading(false)
     }
   }
 
@@ -434,6 +523,130 @@ export default function AdminPage() {
     }
   }, [orders])
 
+  // Customer Profiles Aggregated from Orders (Database Konsumen / CRM)
+  const customerProfiles = useMemo<CustomerProfile[]>(() => {
+    const customerMap = new Map<
+      string,
+      {
+        name: string
+        phone: string
+        businessName: string
+        businessType: string
+        city: string
+        hubArea: string
+        orders: AdminOrder[]
+      }
+    >()
+
+    orders.forEach((order) => {
+      const cleanPhone = (order.phone || '').trim().replace(/[^0-9]/g, '')
+      const key =
+        cleanPhone.length >= 8
+          ? cleanPhone
+          : (order.customerName || 'anon').toLowerCase().trim()
+
+      const existing = customerMap.get(key)
+      if (existing) {
+        existing.orders.push(order)
+        if (order.businessName && !existing.businessName) existing.businessName = order.businessName
+        if (order.city && !existing.city) existing.city = order.city
+      } else {
+        customerMap.set(key, {
+          name: order.customerName,
+          phone: order.phone || '',
+          businessName: order.businessName || '',
+          businessType: order.businessType || 'Restoran / Rumah Makan',
+          city: order.city || 'Denpasar',
+          hubArea: order.hubArea || 'Bali',
+          orders: [order],
+        })
+      }
+    })
+
+    const now = Date.now()
+    const profiles: CustomerProfile[] = []
+
+    customerMap.forEach((entry, key) => {
+      const sortedOrders = [...entry.orders].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )
+      const lastOrder = sortedOrders[0]
+      const lastOrderTime = new Date(lastOrder.createdAt).getTime()
+      const daysSince = Math.floor((now - lastOrderTime) / (1000 * 60 * 60 * 24))
+
+      const totalSpent = sortedOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0)
+      const totalOrders = sortedOrders.length
+
+      // Tally favorite products
+      const itemMap = new Map<string, number>()
+      sortedOrders.forEach((o) => {
+        o.items?.forEach((it) => {
+          const current = itemMap.get(it.productName) || 0
+          itemMap.set(it.productName, current + it.quantity)
+        })
+      })
+      const itemsBought = Array.from(itemMap.entries())
+        .map(([name, totalQty]) => ({ name, totalQty }))
+        .sort((a, b) => b.totalQty - a.totalQty)
+
+      // Loyalty tier assignment
+      let loyaltyTier: 'VIP' | 'REGULAR' | 'NEW' = 'NEW'
+      let loyaltyLabel = 'Pelanggan Baru'
+      if (totalOrders >= 4 || totalSpent >= 1500000) {
+        loyaltyTier = 'VIP'
+        loyaltyLabel = 'Mitra VIP / Loyal'
+      } else if (totalOrders >= 2) {
+        loyaltyTier = 'REGULAR'
+        loyaltyLabel = 'Mitra Reguler'
+      }
+
+      profiles.push({
+        id: `cust-${key}`,
+        name: entry.name,
+        phone: entry.phone,
+        businessName: entry.businessName,
+        businessType: entry.businessType,
+        city: entry.city,
+        hubArea: entry.hubArea,
+        totalOrders,
+        totalSpent,
+        lastOrderDate: lastOrder.createdAt,
+        daysSinceLastOrder: Math.max(0, daysSince),
+        itemsBought,
+        loyaltyTier,
+        loyaltyLabel,
+        orders: sortedOrders,
+        needsFollowUp: daysSince >= 7,
+      })
+    })
+
+    return profiles.sort(
+      (a, b) => new Date(b.lastOrderDate).getTime() - new Date(a.lastOrderDate).getTime()
+    )
+  }, [orders])
+
+  // Filtered Customer Profiles for Display
+  const filteredCustomers = useMemo(() => {
+    return customerProfiles.filter((cust) => {
+      if (customerHubFilter !== 'ALL' && cust.hubArea !== customerHubFilter) return false
+      if (customerTierFilter !== 'ALL' && cust.loyaltyTier !== customerTierFilter) return false
+      if (customerFollowUpFilter === 'NEED_FOLLOWUP' && !cust.needsFollowUp) return false
+      if (customerFollowUpFilter === 'RECENT' && cust.needsFollowUp) return false
+
+      if (customerSearchQuery.trim()) {
+        const q = customerSearchQuery.toLowerCase()
+        const match =
+          cust.name.toLowerCase().includes(q) ||
+          cust.businessName.toLowerCase().includes(q) ||
+          cust.phone.toLowerCase().includes(q) ||
+          cust.city.toLowerCase().includes(q) ||
+          cust.itemsBought.some((it) => it.name.toLowerCase().includes(q))
+        if (!match) return false
+      }
+      return true
+    })
+  }, [customerProfiles, customerHubFilter, customerTierFilter, customerFollowUpFilter, customerSearchQuery])
+
   // Format IDR helper
   const formatIDR = (val: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -441,6 +654,30 @@ export default function AdminPage() {
       currency: 'IDR',
       maximumFractionDigits: 0,
     }).format(val)
+  }
+
+  // Helper Follow-Up Template Generator
+  const getFollowUpTemplateText = (
+    cust: CustomerProfile,
+    template: 'APPRECIATION_DISCOUNT' | 'RESTOCK_REMINDER' | 'GROSIR_OFFER' | 'CUSTOM'
+  ): string => {
+    const favoriteProduct = cust.itemsBought[0]?.name || 'produk beku HATOBA'
+    const targetBusiness = cust.businessName ? `(${cust.businessName})` : ''
+
+    switch (template) {
+      case 'APPRECIATION_DISCOUNT':
+        return `Halo ${cust.name} ${targetBusiness},\n\nTerima kasih atas kepercayaannya sudah berbelanja produk beku di *HATOBA Frozen Food*.\n\nSebagai bentuk apresiasi bagi pelanggan setia kami, khusus pesanan berikutnya kami ingin memberikan *Penawaran Spesial Apresiasi / Potongan Harga Khusus Rp 10.000 per pack* untuk pemesanan ${favoriteProduct}.\n\nKira-kira kapan jadwal pengiriman beku yang pas untuk operasional dapur Anda minggu ini? Kami siap kirimkan dengan standar cold chain −18°C. Terima kasih!`
+
+      case 'RESTOCK_REMINDER':
+        return `Halo ${cust.name} ${targetBusiness},\n\nSalam hangat dari *HATOBA Frozen Food*!\n\nMenanyakan untuk persediaan stok bahan baku di dapur Anda (terakhir order ${cust.daysSinceLastOrder} hari yang lalu), apakah persediaan ${favoriteProduct} masih aman atau sudah perlu dijadwalkan restock baru minggu ini?\n\nKami siap jadwalkan pengiriman cepat berpendingin agar operasional resto/warung tetap lancar tanpa kendala kehabisan stok. Ditunggu konfirmasinya ya!`
+
+      case 'GROSIR_OFFER':
+        return `Halo ${cust.name} ${targetBusiness},\n\nSemoga operasional bisnis kuliner Anda semakin sukses dan lancar!\n\nKami ingin menginformasikan bahwa untuk kebutuhan partai rutin ${targetBusiness || 'usaha Anda'}, HATOBA menyediakan program kemitraan B2B dengan *Harga Grosir Terbaik (mulai pembelian 5 pack)* serta fleksibilitas jadwal suplai berkala.\n\nJika ada kebutuhan pasokan baru atau ingin konsultasi varian tester, silakan hubungi kami kapan saja ya!`
+
+      case 'CUSTOM':
+      default:
+        return `Halo ${cust.name} ${targetBusiness},\n\nSalam dari HATOBA Frozen Food Hub ${cust.hubArea}. Semoga operasional ${cust.businessName || 'dapur Anda'} berjalan lancar hari ini.\n\n`
+    }
   }
 
   // 1. Loading screen
@@ -629,6 +866,19 @@ export default function AdminPage() {
                 {metrics.pendingCount}
               </span>
             )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('customers')}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all flex items-center gap-2 whitespace-nowrap relative ${
+              activeTab === 'customers'
+                ? 'bg-[#111613] text-white shadow-md'
+                : 'text-[#48564F] hover:text-[#111613] hover:bg-gray-100'
+            }`}
+          >
+            <Users className="w-4 h-4 text-[#8C6B24]" />
+            <span>Database Konsumen</span>
+            <span className="text-[10px] text-gray-400 font-semibold">({customerProfiles.length})</span>
           </button>
 
           <button
@@ -1069,36 +1319,62 @@ export default function AdminPage() {
                             )}
                           </td>
 
-                          {/* Status */}
+                          {/* Status & Payment Status */}
                           <td className="py-4 px-4 align-top">
-                            {ord.status === 'VERIFIED' && (
-                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                <span>Diterima / Lolos</span>
-                              </span>
-                            )}
-                            {ord.status === 'PENDING' && (
-                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                                <Clock className="w-3.5 h-3.5" />
-                                <span>Menunggu Review</span>
-                              </span>
-                            )}
-                            {ord.status === 'REJECTED' && (
-                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-bold bg-red-50 text-red-700 border border-red-200">
-                                <XCircle className="w-3.5 h-3.5" />
-                                <span>Ditolak</span>
-                              </span>
-                            )}
-                            {ord.adjustmentNotes && (
-                              <span className="inline-block mt-1 px-2 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                                Stok Disesuaikan
-                              </span>
-                            )}
-                            {ord.statusNotes && (
-                              <span className="block text-[10px] text-gray-500 mt-1 italic max-w-[140px]">
-                                {ord.statusNotes}
-                              </span>
-                            )}
+                            <div className="space-y-1">
+                              {ord.status === 'VERIFIED' && (
+                                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <span>Diterima / Lolos</span>
+                                </span>
+                              )}
+                              {ord.status === 'PENDING' && (
+                                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                  <Clock className="w-3.5 h-3.5" />
+                                  <span>Menunggu Review</span>
+                                </span>
+                              )}
+                              {ord.status === 'REJECTED' && (
+                                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-bold bg-red-50 text-red-700 border border-red-200">
+                                  <XCircle className="w-3.5 h-3.5" />
+                                  <span>Ditolak</span>
+                                </span>
+                              )}
+
+                              {/* Payment Status Badge */}
+                              <div className="pt-0.5">
+                                {ord.paymentStatus === 'LUNAS' ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                    <span>LUNAS</span>
+                                  </span>
+                                ) : ord.paymentStatus === 'DP' ? (
+                                  <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                    DP ({formatIDR(ord.paidAmount || 0)})
+                                  </span>
+                                ) : ord.paymentStatus === 'TEMPO' ? (
+                                  <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-800 border border-orange-300">
+                                    Tempo B2B
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                                    <Clock className="w-3 h-3 text-rose-600" />
+                                    <span>Tagihan (Belum Bayar)</span>
+                                  </span>
+                                )}
+                              </div>
+
+                              {ord.adjustmentNotes && (
+                                <span className="inline-block px-2 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                  Stok Disesuaikan
+                                </span>
+                              )}
+                              {ord.statusNotes && (
+                                <span className="block text-[10px] text-gray-500 italic max-w-[140px]">
+                                  {ord.statusNotes}
+                                </span>
+                              )}
+                            </div>
                           </td>
 
                           {/* Actions */}
@@ -1111,6 +1387,22 @@ export default function AdminPage() {
                                   className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition-all shadow-sm flex items-center gap-1"
                                 >
                                   <span>Cek &amp; Terima</span>
+                                </button>
+                              )}
+
+                              {/* Tandai Lunas Button (if verified or pending but payment not yet Lunas) */}
+                              {ord.paymentStatus !== 'LUNAS' && ord.status !== 'REJECTED' && (
+                                <button
+                                  onClick={() => {
+                                    setOrderToMarkPaid(ord)
+                                    setPayMethodInput(ord.paymentMethod || 'Transfer BCA')
+                                    setPayNotesInput('')
+                                  }}
+                                  title="Tandai pembayaran telah diterima oleh konsumen (LUNAS)"
+                                  className="px-2.5 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold transition-all shadow-sm flex items-center gap-1"
+                                >
+                                  <CreditCard className="w-3 h-3" />
+                                  <span>Tandai Lunas</span>
                                 </button>
                               )}
 
@@ -1149,7 +1441,7 @@ export default function AdminPage() {
 
                               <button
                                 onClick={() => setSelectedOrderForPrint(ord)}
-                                title="Cetak Nota / Simpan PDF"
+                                title="Cetak Nota / Simpan PDF / Bagikan Tagihan"
                                 className="p-1.5 rounded-lg border border-gray-300 hover:bg-gray-100 text-gray-700 transition-all"
                               >
                                 <Printer className="w-3.5 h-3.5" />
@@ -1158,6 +1450,328 @@ export default function AdminPage() {
                           </td>
                         </tr>
                       ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ======================= TAB: DATABASE KONSUMEN & CRM ======================= */}
+        {activeTab === 'customers' && (
+          <div className="space-y-6">
+            {/* Header & Metrics Overview */}
+            <div className="bg-white rounded-2xl p-6 border border-[#E8DFD5] shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div>
+                <h3 className="font-serif-title text-xl font-bold text-[#111613] flex items-center gap-2">
+                  <Users className="w-5 h-5 text-[#8C6B24]" />
+                  <span>Database Konsumen &amp; CRM Pelanggan</span>
+                </h3>
+                <p className="text-xs text-[#5C6E65] mt-0.5">
+                  Rekapitulasi riwayat pesanan, tingkat loyalitas mitra, jadwal restock, dan follow-up WhatsApp untuk apresiasi/bonus/diskon.
+                </p>
+              </div>
+
+              {/* Quick Customer CSV Export */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (customerProfiles.length === 0) {
+                    alert('Belum ada data konsumen yang tersimpan.')
+                    return
+                  }
+                  const headers = [
+                    'Nama Pelanggan',
+                    'Nama Usaha / Bisnis',
+                    'Jenis Usaha',
+                    'Nomor WhatsApp',
+                    'Kota',
+                    'Hub Layanan',
+                    'Tingkat Loyalitas',
+                    'Total Transaksi',
+                    'Total Belanja (IDR)',
+                    'Order Terakhir',
+                    'Hari Sejak Order',
+                    'Status Follow Up',
+                  ]
+                  const rows = customerProfiles.map((c) => [
+                    `"${c.name.replace(/"/g, '""')}"`,
+                    `"${(c.businessName || '-').replace(/"/g, '""')}"`,
+                    `"${(c.businessType || '-').replace(/"/g, '""')}"`,
+                    `"${c.phone}"`,
+                    `"${c.city}"`,
+                    `"${c.hubArea}"`,
+                    `"${c.loyaltyLabel}"`,
+                    c.totalOrders,
+                    c.totalSpent,
+                    `"${new Date(c.lastOrderDate).toLocaleDateString('id-ID')}"`,
+                    c.daysSinceLastOrder,
+                    c.needsFollowUp ? '"Perlu Restock / Follow-up"' : '"Aktif / Baru Order"',
+                  ])
+                  const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')
+                  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+                  const url = URL.createObjectURL(blob)
+                  const link = document.createElement('a')
+                  link.setAttribute('href', url)
+                  link.setAttribute('download', `database_konsumen_hatoba_${new Date().toISOString().slice(0, 10)}.csv`)
+                  document.body.appendChild(link)
+                  link.click()
+                  document.body.removeChild(link)
+                }}
+                className="px-4 py-2 rounded-xl border border-[#D8CEBE] hover:bg-[#FAF8F5] text-xs font-semibold text-[#111613] transition-all flex items-center gap-1.5"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                <span>Export Data Konsumen (CSV)</span>
+              </button>
+            </div>
+
+            {/* Top 4 Metrics Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <div className="p-4 sm:p-5 rounded-2xl bg-white border border-[#E8DFD5] shadow-sm space-y-1">
+                <span className="text-[11px] font-semibold text-[#5C6E65] block uppercase tracking-wider">
+                  Total Konsumen
+                </span>
+                <div className="font-mono text-2xl font-bold text-[#111613]">
+                  {customerProfiles.length}
+                </div>
+                <span className="text-[10px] text-gray-500">Unik terdata dari riwayat order</span>
+              </div>
+
+              <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/70 border border-amber-200 shadow-sm space-y-1">
+                <span className="text-[11px] font-semibold text-amber-900 block uppercase tracking-wider flex items-center gap-1">
+                  <Gift className="w-3.5 h-3.5 text-amber-700" />
+                  Mitra VIP &amp; Loyal
+                </span>
+                <div className="font-mono text-2xl font-bold text-amber-950">
+                  {customerProfiles.filter((c) => c.loyaltyTier === 'VIP').length}
+                </div>
+                <span className="text-[10px] text-amber-800">Order &ge;4x atau belanja &ge;1,5 jt</span>
+              </div>
+
+              <div className="p-4 sm:p-5 rounded-2xl bg-emerald-50/70 border border-emerald-200 shadow-sm space-y-1">
+                <span className="text-[11px] font-semibold text-emerald-900 block uppercase tracking-wider">
+                  Total Omset Konsumen
+                </span>
+                <div className="font-mono text-xl sm:text-2xl font-bold text-emerald-950">
+                  {formatIDR(customerProfiles.reduce((s, c) => s + c.totalSpent, 0))}
+                </div>
+                <span className="text-[10px] text-emerald-800">Akumulasi nilai pesanan</span>
+              </div>
+
+              <div className="p-4 sm:p-5 rounded-2xl bg-rose-50/70 border border-rose-200 shadow-sm space-y-1">
+                <span className="text-[11px] font-semibold text-rose-900 block uppercase tracking-wider flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5 text-rose-700" />
+                  Perlu Follow-up
+                </span>
+                <div className="font-mono text-2xl font-bold text-rose-950">
+                  {customerProfiles.filter((c) => c.needsFollowUp).length}
+                </div>
+                <span className="text-[10px] text-rose-800">&ge;7 hari belum order kembali</span>
+              </div>
+            </div>
+
+            {/* Filter & Search Bar */}
+            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-[#E8DFD5] shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+              {/* Search */}
+              <div className="relative flex-1 min-w-[240px]">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Cari nama konsumen, usaha resto, nomor WhatsApp, kota, produk..."
+                  value={customerSearchQuery}
+                  onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs focus:outline-none focus:border-[#8C6B24]"
+                />
+              </div>
+
+              {/* Filters */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Hub Filter */}
+                <select
+                  value={customerHubFilter}
+                  onChange={(e) => setCustomerHubFilter(e.target.value as 'ALL' | 'Bali' | 'Yogyakarta')}
+                  className="px-3 py-1.5 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs font-medium focus:outline-none"
+                >
+                  <option value="ALL">Semua Hub Layanan</option>
+                  <option value="Bali">Hub Bali</option>
+                  <option value="Yogyakarta">Hub D.I. Yogyakarta</option>
+                </select>
+
+                {/* Tier Filter */}
+                <select
+                  value={customerTierFilter}
+                  onChange={(e) => setCustomerTierFilter(e.target.value as 'ALL' | 'VIP' | 'REGULAR' | 'NEW')}
+                  className="px-3 py-1.5 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs font-medium focus:outline-none"
+                >
+                  <option value="ALL">Semua Tingkat Loyalitas</option>
+                  <option value="VIP">Mitra VIP / Loyal</option>
+                  <option value="REGULAR">Mitra Reguler (2-3x)</option>
+                  <option value="NEW">Pelanggan Baru (1x)</option>
+                </select>
+
+                {/* Follow-up Filter */}
+                <select
+                  value={customerFollowUpFilter}
+                  onChange={(e) => setCustomerFollowUpFilter(e.target.value as 'ALL' | 'NEED_FOLLOWUP' | 'RECENT')}
+                  className="px-3 py-1.5 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs font-medium focus:outline-none"
+                >
+                  <option value="ALL">Semua Status Restock</option>
+                  <option value="NEED_FOLLOWUP">Perlu Follow-up (&ge;7 hari)</option>
+                  <option value="RECENT">Baru Order (&lt;7 hari)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Customers Table */}
+            <div className="bg-white rounded-2xl border border-[#E8DFD5] shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-[#EAE4DC] bg-[#FAF8F5] text-[#5C6E65] font-bold">
+                      <th className="py-3 px-4">Konsumen &amp; Usaha</th>
+                      <th className="py-3 px-4">Kontak WhatsApp</th>
+                      <th className="py-3 px-4">Tingkat Loyalitas</th>
+                      <th className="py-3 px-4">Total Order &amp; Belanja</th>
+                      <th className="py-3 px-4">Order Terakhir</th>
+                      <th className="py-3 px-4">Produk Sering Dipesan</th>
+                      <th className="py-3 px-4 text-right">Aksi Follow-up</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#EAE4DC]">
+                    {filteredCustomers.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-12 text-center text-gray-500">
+                          Tidak ditemukan data konsumen yang cocok dengan filter pencarian.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredCustomers.map((cust) => {
+                        const cleanPhone = (cust.phone || '').replace(/[^0-9]/g, '')
+                        const targetPhone = cleanPhone.startsWith('0')
+                          ? '62' + cleanPhone.slice(1)
+                          : cleanPhone.startsWith('62')
+                          ? cleanPhone
+                          : '62' + cleanPhone
+
+                        return (
+                          <tr key={cust.id} className="hover:bg-[#FAF8F5]/80 transition-colors">
+                            {/* Konsumen & Bisnis */}
+                            <td className="py-4 px-4 align-top">
+                              <div className="font-bold text-[#111613] text-sm">{cust.name}</div>
+                              {cust.businessName && (
+                                <div className="text-[11px] font-semibold text-[#8C6B24]">
+                                  {cust.businessName}
+                                </div>
+                              )}
+                              <div className="text-[10px] text-gray-500">
+                                {cust.city} &middot; Hub {cust.hubArea}
+                              </div>
+                            </td>
+
+                            {/* Kontak WA */}
+                            <td className="py-4 px-4 align-top">
+                              <a
+                                href={`https://wa.me/${targetPhone}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 font-mono font-medium text-emerald-700 hover:text-emerald-900 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200"
+                              >
+                                <span>{cust.phone}</span>
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            </td>
+
+                            {/* Tingkat Loyalitas */}
+                            <td className="py-4 px-4 align-top">
+                              {cust.loyaltyTier === 'VIP' ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                  <Sparkles className="w-3 h-3 text-amber-700" />
+                                  <span>{cust.loyaltyLabel}</span>
+                                </span>
+                              ) : cust.loyaltyTier === 'REGULAR' ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-900 border border-blue-300">
+                                  <UserCheck className="w-3 h-3 text-blue-700" />
+                                  <span>{cust.loyaltyLabel}</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                  <span>{cust.loyaltyLabel}</span>
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Total Transaksi & Belanja */}
+                            <td className="py-4 px-4 align-top">
+                              <span className="font-mono font-bold text-sm text-[#111613] block">
+                                {formatIDR(cust.totalSpent)}
+                              </span>
+                              <span className="text-[11px] text-gray-500 font-medium">
+                                {cust.totalOrders} kali pesanan
+                              </span>
+                            </td>
+
+                            {/* Order Terakhir */}
+                            <td className="py-4 px-4 align-top">
+                              <span className="block font-medium text-[11px] text-gray-800">
+                                {new Date(cust.lastOrderDate).toLocaleDateString('id-ID', {
+                                  day: 'numeric',
+                                  month: 'short',
+                                  year: 'numeric',
+                                })}
+                              </span>
+                              {cust.needsFollowUp ? (
+                                <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                                  <Clock className="w-2.5 h-2.5 text-rose-600" />
+                                  <span>{cust.daysSinceLastOrder} hari lalu (Restock)</span>
+                                </span>
+                              ) : (
+                                <span className="inline-block mt-1 text-[10px] text-emerald-700 font-semibold">
+                                  {cust.daysSinceLastOrder === 0
+                                    ? 'Hari ini'
+                                    : `${cust.daysSinceLastOrder} hari lalu`}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Produk Sering Dipesan */}
+                            <td className="py-4 px-4 align-top">
+                              <div className="space-y-1 max-w-[200px]">
+                                {cust.itemsBought.slice(0, 3).map((it, idx) => (
+                                  <div key={idx} className="text-[11px] text-gray-700 truncate">
+                                    <span className="font-bold text-[#111613]">{it.totalQty}x</span>{' '}
+                                    {it.name}
+                                  </div>
+                                ))}
+                                {cust.itemsBought.length > 3 && (
+                                  <span className="text-[9px] text-gray-400 italic">
+                                    +{cust.itemsBought.length - 3} produk lainnya
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Action: Follow-up & Promo */}
+                            <td className="py-4 px-4 align-top text-right">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedCustomerForFollowUp(cust)
+                                  setFollowUpTemplate('APPRECIATION_DISCOUNT')
+                                  setCustomFollowUpMessage(
+                                    getFollowUpTemplateText(cust, 'APPRECIATION_DISCOUNT')
+                                  )
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition-all shadow-xs flex items-center gap-1.5 ml-auto"
+                                title="Buka modal pesan apresiasi, diskon, atau pengingat restock WhatsApp"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                                <span>Follow-up &amp; Promo</span>
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })
                     )}
                   </tbody>
                 </table>
@@ -1631,7 +2245,7 @@ export default function AdminPage() {
                   className="w-full p-3 rounded-xl bg-white border border-[#D8CEBE] text-xs text-[#111613] focus:outline-none focus:ring-2 focus:ring-[#C59B47]/20 focus:border-[#C59B47] shadow-2xs"
                 />
                 <p className="text-[10px] text-gray-500">
-                  Catatan ini akan tersimpan di sistem, dicetak pada Invoice resmi &amp; Struk Nota kasir, dan <strong>tidak muncul</strong> di Surat Jalan (DO).
+                  Catatan ini akan tersimpan di sistem, dicetak pada Faktur Tagihan resmi &amp; Struk Nota kasir (status Tagihan Belum Bayar hingga dilunasi oleh admin), dan <strong>tidak muncul</strong> di Surat Jalan (DO).
                 </p>
               </div>
             </div>
@@ -2162,7 +2776,304 @@ export default function AdminPage() {
         <OrderPrintModal
           order={selectedOrderForPrint}
           onClose={() => setSelectedOrderForPrint(null)}
+          onMarkPaid={(ord) => {
+            setSelectedOrderForPrint(null)
+            setOrderToMarkPaid(ord)
+            setPayMethodInput(ord.paymentMethod || 'Transfer BCA')
+            setPayNotesInput('')
+          }}
         />
+      )}
+
+      {/* ======================= MODAL: PELUNASAN TAGIHAN (MARK AS PAID) ======================= */}
+      {orderToMarkPaid && (
+        <div className="fixed inset-0 z-[75] bg-black/65 backdrop-blur-sm overflow-y-auto p-4 flex justify-center items-center">
+          <div className="relative max-w-md w-full bg-white rounded-3xl p-6 sm:p-7 border border-[#E8DFD5] shadow-2xl space-y-4 my-auto">
+            <div className="flex items-start justify-between border-b border-gray-100 pb-3">
+              <div>
+                <h4 className="font-serif-title text-lg font-bold text-[#111613] flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-emerald-600" />
+                  <span>Pelunasan Tagihan Pembayaran</span>
+                </h4>
+                <p className="text-xs text-gray-500">
+                  Ubah status tagihan pesanan menjadi LUNAS setelah pembayaran diterima
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOrderToMarkPaid(null)}
+                className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Order Details Summary */}
+            <div className="p-3.5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] space-y-1.5 text-xs">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Nomor Referensi:</span>
+                <span className="font-mono font-bold text-[#8C6B24]">{orderToMarkPaid.referenceCode}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Nama Pelanggan:</span>
+                <span className="font-semibold text-[#111613]">
+                  {orderToMarkPaid.customerName}{' '}
+                  {orderToMarkPaid.businessName ? `(${orderToMarkPaid.businessName})` : ''}
+                </span>
+              </div>
+              <div className="flex justify-between items-center pt-1 border-t border-gray-200">
+                <span className="text-gray-600 font-bold">Total Tagihan:</span>
+                <span className="font-mono font-bold text-base text-emerald-800">
+                  {formatIDR(orderToMarkPaid.totalAmount)}
+                </span>
+              </div>
+            </div>
+
+            {/* Payment Method Selector */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-gray-700 block">
+                Pilih Rekening / Metode Pembayaran Masuk:
+              </label>
+              <select
+                value={payMethodInput}
+                onChange={(e) => setPayMethodInput(e.target.value)}
+                className="w-full p-2.5 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs font-semibold focus:outline-none focus:border-emerald-600"
+              >
+                <option value="Transfer BCA">Transfer BCA (772-512-8899 a.n PT HATOBA PANGAN NUSANTARA)</option>
+                <option value="Transfer Mandiri">Transfer Mandiri (137-00-198822-1 a.n HATOBA FROZEN FOOD)</option>
+                <option value="Transfer Bank Lain">Transfer Bank Lain (Antar Bank)</option>
+                <option value="Tunai / Cash">Tunai / Cash Kasir</option>
+                <option value="QRIS">QRIS Standar</option>
+              </select>
+            </div>
+
+            {/* Notes Input */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-gray-700 block">
+                Catatan Pelunasan / Bukti Transfer:
+              </label>
+              <input
+                type="text"
+                placeholder="Misal: Bukti transfer BCA atas nama Ibu Siti, jam 14:15"
+                value={payNotesInput}
+                onChange={(e) => setPayNotesInput(e.target.value)}
+                className="w-full p-2.5 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs focus:outline-none focus:border-emerald-600"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setOrderToMarkPaid(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={payLoading}
+                onClick={handleConfirmMarkPaid}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20 disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{payLoading ? 'Memproses...' : 'Konfirmasi LUNAS'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================= MODAL: FOLLOW-UP WHATSAPP & PROMO APRESIASI ======================= */}
+      {selectedCustomerForFollowUp && (
+        <div className="fixed inset-0 z-[75] bg-black/65 backdrop-blur-sm overflow-y-auto p-4 flex justify-center items-center">
+          <div className="relative max-w-xl w-full bg-white rounded-3xl p-6 sm:p-7 border border-[#E8DFD5] shadow-2xl space-y-4 my-auto">
+            <div className="flex items-start justify-between border-b border-gray-100 pb-3">
+              <div>
+                <h4 className="font-serif-title text-lg font-bold text-[#111613] flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-emerald-600" />
+                  <span>Follow-up Konsumen via WhatsApp</span>
+                </h4>
+                <p className="text-xs text-gray-500">
+                  Kirimkan pesan apresiasi, diskon repeat order, atau pengingat restock bahan baku
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedCustomerForFollowUp(null)}
+                className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Customer Snapshot */}
+            <div className="p-3.5 rounded-2xl bg-[#FAF8F5] border border-[#EAE4DC] flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div>
+                <div className="font-bold text-[#111613] text-sm">
+                  {selectedCustomerForFollowUp.name}{' '}
+                  {selectedCustomerForFollowUp.businessName
+                    ? `(${selectedCustomerForFollowUp.businessName})`
+                    : ''}
+                </div>
+                <div className="text-gray-500 text-[11px]">
+                  {selectedCustomerForFollowUp.city} &middot; Hub {selectedCustomerForFollowUp.hubArea} &middot; WA: {selectedCustomerForFollowUp.phone}
+                </div>
+              </div>
+              <div className="text-right font-mono">
+                <span className="font-bold text-emerald-800">
+                  {formatIDR(selectedCustomerForFollowUp.totalSpent)}
+                </span>
+                <span className="text-[10px] text-gray-400 block">
+                  {selectedCustomerForFollowUp.totalOrders}x order
+                </span>
+              </div>
+            </div>
+
+            {/* Template Selector */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-700 block">
+                Pilih Tema Pesan WhatsApp:
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFollowUpTemplate('APPRECIATION_DISCOUNT')
+                    setCustomFollowUpMessage(
+                      getFollowUpTemplateText(selectedCustomerForFollowUp, 'APPRECIATION_DISCOUNT')
+                    )
+                  }}
+                  className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-start gap-2 ${
+                    followUpTemplate === 'APPRECIATION_DISCOUNT'
+                      ? 'border-amber-500 bg-amber-50 text-amber-950 font-semibold'
+                      : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
+                  }`}
+                >
+                  <Gift className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-bold">Apresiasi &amp; Diskon Khusus</div>
+                    <div className="text-[10px] text-gray-500">Potongan Rp 10.000 / pack repeat order</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFollowUpTemplate('RESTOCK_REMINDER')
+                    setCustomFollowUpMessage(
+                      getFollowUpTemplateText(selectedCustomerForFollowUp, 'RESTOCK_REMINDER')
+                    )
+                  }}
+                  className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-start gap-2 ${
+                    followUpTemplate === 'RESTOCK_REMINDER'
+                      ? 'border-emerald-500 bg-emerald-50 text-emerald-950 font-semibold'
+                      : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
+                  }`}
+                >
+                  <Clock className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-bold">Pengingat Restock Dapur</div>
+                    <div className="text-[10px] text-gray-500">
+                      Tanya stok setelah {selectedCustomerForFollowUp.daysSinceLastOrder} hari
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFollowUpTemplate('GROSIR_OFFER')
+                    setCustomFollowUpMessage(
+                      getFollowUpTemplateText(selectedCustomerForFollowUp, 'GROSIR_OFFER')
+                    )
+                  }}
+                  className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-start gap-2 ${
+                    followUpTemplate === 'GROSIR_OFFER'
+                      ? 'border-blue-500 bg-blue-50 text-blue-950 font-semibold'
+                      : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
+                  }`}
+                >
+                  <Sparkles className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-bold">Penawaran Grosir &amp; Partai</div>
+                    <div className="text-[10px] text-gray-500">Program harga grosir &ge;5 pack &amp; B2B</div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFollowUpTemplate('CUSTOM')
+                    setCustomFollowUpMessage(
+                      getFollowUpTemplateText(selectedCustomerForFollowUp, 'CUSTOM')
+                    )
+                  }}
+                  className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-start gap-2 ${
+                    followUpTemplate === 'CUSTOM'
+                      ? 'border-stone-500 bg-stone-100 text-stone-900 font-semibold'
+                      : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
+                  }`}
+                >
+                  <Pencil className="w-4 h-4 text-gray-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-bold">Tulis Pesan Sendiri</div>
+                    <div className="text-[10px] text-gray-500">Pesan bebas kustom sesuai kebutuhan</div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Editable Message Textarea */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-gray-700 block">
+                Review &amp; Edit Pesan WhatsApp Sebelum Dikirim:
+              </label>
+              <textarea
+                rows={6}
+                value={customFollowUpMessage}
+                onChange={(e) => setCustomFollowUpMessage(e.target.value)}
+                className="w-full p-3 rounded-xl bg-[#FAF8F5] border border-[#D8CEBE] text-xs font-sans leading-relaxed focus:outline-none focus:border-emerald-600"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setSelectedCustomerForFollowUp(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const cleanPhone = (selectedCustomerForFollowUp.phone || '').replace(/[^0-9]/g, '')
+                  const targetPhone = cleanPhone.startsWith('0')
+                    ? '62' + cleanPhone.slice(1)
+                    : cleanPhone.startsWith('62')
+                    ? cleanPhone
+                    : '62' + cleanPhone
+
+                  const waUrl = `https://wa.me/${targetPhone}?text=${encodeURIComponent(
+                    customFollowUpMessage
+                  )}`
+                  window.open(waUrl, '_blank')
+                  showToast(
+                    `Membuka WhatsApp untuk follow-up ${selectedCustomerForFollowUp.name}!`,
+                    'success'
+                  )
+                  setSelectedCustomerForFollowUp(null)
+                }}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20 flex items-center gap-2"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Buka &amp; Kirim via WhatsApp</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Toast Notification */}

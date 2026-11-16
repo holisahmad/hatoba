@@ -23,9 +23,10 @@ import { AdminOrder } from '@/lib/admin-store'
 interface OrderPrintModalProps {
   order: AdminOrder | null
   onClose: () => void
+  onMarkPaid?: (order: AdminOrder) => void
 }
 
-export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps) {
+export default function OrderPrintModal({ order, onClose, onMarkPaid }: OrderPrintModalProps) {
   const [printMode, setPrintMode] = useState<'invoice' | 'thermal' | 'surat_jalan'>('invoice')
   const [isExportingImage, setIsExportingImage] = useState(false)
   const [downloadSuccess, setDownloadSuccess] = useState(false)
@@ -106,6 +107,13 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
     }
   }
 
+  // Determine Stamp & Payment Status
+  const isPaid = order.paymentStatus === 'LUNAS'
+  const isDP = order.paymentStatus === 'DP'
+  const isTempo = order.paymentStatus === 'TEMPO'
+  const isCampuran = isDP && (order.paymentMethod || '').toLowerCase().includes('tempo')
+  const isUnpaid = !isPaid && !isDP && !isTempo
+
   // Generate WhatsApp Share Link for the customer
   const handleShareWhatsApp = () => {
     const cleanPhone = (order.phone || '').replace(/[^0-9]/g, '')
@@ -115,28 +123,33 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
       ? cleanPhone
       : '62' + cleanPhone
 
-    const isPaid = order.paymentStatus === 'LUNAS' || (order.status === 'VERIFIED' && order.paymentStatus !== 'DP' && order.paymentStatus !== 'TEMPO')
-    const isDP = order.paymentStatus === 'DP'
-    const statusText = isPaid ? 'LUNAS (PAID)' : isDP ? 'DP DITERIMA' : 'MENUNGGU PEMBAYARAN'
+    const statusText = isPaid
+      ? 'LUNAS (PAID)'
+      : isCampuran
+      ? 'BAYAR + TEMPO'
+      : isDP
+      ? 'DP DITERIMA'
+      : isTempo
+      ? 'TEMPO B2B'
+      : 'MENUNGGU PEMBAYARAN (TAGIHAN)'
 
     const itemsSummary = order.items
       .map((it) => `• ${it.productName} (${it.variantName}) — ${it.quantity} pack = ${formatIDR(it.subtotal)}`)
       .join('\n')
 
-    const message = `Halo ${order.customerName},\n\nBerikut rincian Faktur / Invoice Resmi dari *HATOBA Frozen Food*:\n\n*Nomor Invoice:* INV-${order.referenceCode}\n*Status:* *${statusText}*\n*Tujuan:* ${order.businessName || order.customerName} (${order.city})\n\n*Rincian Pesanan:*\n${itemsSummary}\n\n*Total Tagihan:* *${formatIDR(order.totalAmount)}*\n*Metode Pembayaran:* ${order.paymentMethod || 'Transfer / Tunai'}\n\nTerima kasih atas kerja samanya. Pesanan Anda diproses dengan standar rantai dingin −18°C.`
+    const adjustmentText = order.adjustmentNotes
+      ? `\n*Catatan Penyesuaian Pesanan:*\n⚠️ ${order.adjustmentNotes}\n`
+      : ''
+
+    const bankPaymentInfo = !isPaid
+      ? `\n*Rekening Pembayaran Resmi HATOBA:*\n• BCA: *772-512-8899* a.n PT HATOBA PANGAN NUSANTARA\n• Mandiri: *137-00-198822-1* a.n HATOBA FROZEN FOOD\n\n*Mohon kirimkan bukti transfer setelah pembayaran dilakukan agar pesanan segera kami jadwalkan pengiriman beku −18°C.*\n`
+      : ''
+
+    const message = `Halo ${order.customerName},\n\nBerikut rincian ${isPaid ? 'Faktur Lunas / Kuitansi' : 'Faktur Tagihan (Invoice)'} dari *HATOBA Frozen Food*:\n\n*Nomor Invoice:* INV-${order.referenceCode}\n*Status:* *${statusText}*\n*Tujuan:* ${order.businessName || order.customerName} (${order.city})\n\n*Rincian Pesanan:*\n${itemsSummary}\n${adjustmentText}\n*Total Tagihan:* *${formatIDR(order.totalAmount)}*\n*Metode:* ${order.paymentMethod || (isPaid ? 'Lunas' : 'Transfer BCA / Mandiri')}\n${bankPaymentInfo}\nTerima kasih atas kerja samanya. Pesanan Anda diproses dengan standar rantai dingin −18°C.`
 
     const waUrl = `https://wa.me/${targetPhone}?text=${encodeURIComponent(message)}`
     window.open(waUrl, '_blank')
   }
-
-  // Determine Stamp Status
-  const isPaid =
-    order.paymentStatus === 'LUNAS' ||
-    (order.status === 'VERIFIED' && order.paymentStatus !== 'DP' && order.paymentStatus !== 'TEMPO')
-  const isDP = order.paymentStatus === 'DP'
-  const isTempo = order.paymentStatus === 'TEMPO'
-  // CAMPURAN: DP status but paymentMethod contains "Tempo" (set by POS campuran mode)
-  const isCampuran = isDP && (order.paymentMethod || '').toLowerCase().includes('tempo')
 
   return (
     <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
@@ -188,6 +201,19 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2">
+            {/* Quick Mark Paid Button (if not paid yet) */}
+            {!isPaid && onMarkPaid && (
+              <button
+                type="button"
+                onClick={() => onMarkPaid(order)}
+                title="Tandai pembayaran telah diterima (Ubah ke LUNAS)"
+                className="px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                <span>Tandai Lunas</span>
+              </button>
+            )}
+
             {/* Download as Image PNG Button (especially handy for Invoice) */}
             <button
               type="button"
@@ -276,8 +302,26 @@ export default function OrderPrintModal({ order, onClose }: OrderPrintModalProps
                 </div>
 
                 <div className="text-right">
-                  <span className="inline-block px-3 py-1 rounded-md bg-[#8C6B24] text-white text-xs font-bold tracking-wider uppercase mb-1">
-                    INVOICE TAGIHAN
+                  <span
+                    className={`inline-block px-3 py-1 rounded-md text-white text-xs font-bold tracking-wider uppercase mb-1 ${
+                      isPaid
+                        ? 'bg-emerald-700'
+                        : isDP
+                        ? 'bg-amber-700'
+                        : isTempo
+                        ? 'bg-orange-700'
+                        : 'bg-rose-700'
+                    }`}
+                  >
+                    {isPaid
+                      ? 'FAKTUR LUNAS (PAID)'
+                      : isCampuran
+                      ? 'TAGIHAN (BAYAR + TEMPO)'
+                      : isDP
+                      ? 'TAGIHAN (DP DITERIMA)'
+                      : isTempo
+                      ? 'TAGIHAN TEMPO B2B'
+                      : 'FAKTUR TAGIHAN (BELUM BAYAR)'}
                   </span>
                   <div className="font-mono text-sm font-bold text-[#111613]">
                     INV-{order.referenceCode}

@@ -96,6 +96,11 @@ export async function POST(request: Request) {
       items: finalOrder.items,
       totalAmount: finalOrder.totalAmount,
       status: 'PENDING',
+      source: 'WEB',
+      paymentStatus: 'BELUM_BAYAR',
+      paidAmount: 0,
+      paymentMethod: 'Transfer / Menunggu Tagihan',
+      statusNotes: 'Pesanan Web — Menunggu Cek Stok & Terbit Tagihan',
     })
 
     console.log('[ORDER LOGGED BEFORE WHATSAPP]', {

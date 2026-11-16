@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { getAdminOrders, updateAdminOrderStatus, addAdminOrder, OrderStatus, AdminOrder } from '@/lib/admin-store'
+import { getAdminOrders, updateAdminOrderStatus, markOrderAsPaid, addAdminOrder, OrderStatus, AdminOrder } from '@/lib/admin-store'
 import { generateReferenceCode } from '@/lib/whatsapp'
 
 async function checkAuth(): Promise<boolean> {
@@ -96,9 +96,42 @@ export async function PATCH(request: Request) {
   }
 
   try {
-    const { referenceCode, status, notes, adminUser, items, totalAmount, adjustmentNotes } =
-      await request.json()
+    const body = await request.json()
+    const {
+      referenceCode,
+      status,
+      notes,
+      adminUser,
+      items,
+      totalAmount,
+      adjustmentNotes,
+      action,
+      paymentMethod,
+      paidAmount,
+      paymentStatus,
+    } = body
 
+    // 1. Dedicated Action: Mark as Paid (LUNAS)
+    if (action === 'MARK_PAID') {
+      if (!referenceCode) {
+        return NextResponse.json({ error: 'Kode referensi pesanan wajib diisi.' }, { status: 400 })
+      }
+
+      const paidOrder = await markOrderAsPaid(referenceCode, {
+        paymentMethod: paymentMethod || 'Transfer BCA',
+        paidAmount: typeof paidAmount === 'number' ? paidAmount : undefined,
+        adminUser: adminUser || 'Admin Keuangan',
+        notes: notes || '',
+      })
+
+      if (!paidOrder) {
+        return NextResponse.json({ error: 'Pesanan tidak ditemukan.' }, { status: 404 })
+      }
+
+      return NextResponse.json({ success: true, order: paidOrder })
+    }
+
+    // 2. Standard Status or Stock Adjustment Update
     if (!referenceCode || !['PENDING', 'VERIFIED', 'REJECTED'].includes(status)) {
       return NextResponse.json(
         { error: 'Parameter status atau kode referensi tidak valid.' },
@@ -115,6 +148,9 @@ export async function PATCH(request: Request) {
         updatedItems: Array.isArray(items) ? items : undefined,
         newTotalAmount: typeof totalAmount === 'number' ? totalAmount : undefined,
         adjustmentNotes: typeof adjustmentNotes === 'string' ? adjustmentNotes : undefined,
+        paymentStatus: paymentStatus || undefined,
+        paymentMethod: paymentMethod || undefined,
+        paidAmount: typeof paidAmount === 'number' ? paidAmount : undefined,
       }
     )
 

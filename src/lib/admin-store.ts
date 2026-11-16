@@ -59,6 +59,7 @@ export interface ActivityLog {
     | 'ORDER_RECEIVED'
     | 'ADMIN_LOGIN'
     | 'POS_TRANSACTION'
+    | 'PAYMENT_RECEIVED'
   title: string
   description: string
   adminUser: string
@@ -266,6 +267,10 @@ export async function updateAdminOrderStatus(
     updatedItems?: OrderItem[]
     newTotalAmount?: number
     adjustmentNotes?: string
+    paymentStatus?: 'LUNAS' | 'DP' | 'TEMPO' | 'BELUM_BAYAR'
+    paymentMethod?: string
+    paidAmount?: number
+    changeAmount?: number
   }
 ): Promise<AdminOrder | null> {
   const orders = await getAdminOrders()
@@ -289,6 +294,20 @@ export async function updateAdminOrderStatus(
 
   if (options?.adjustmentNotes) {
     order.adjustmentNotes = options.adjustmentNotes
+  }
+
+  // Handle payment status updates if provided
+  if (options?.paymentStatus) {
+    order.paymentStatus = options.paymentStatus
+  }
+  if (options?.paymentMethod) {
+    order.paymentMethod = options.paymentMethod
+  }
+  if (typeof options?.paidAmount === 'number') {
+    order.paidAmount = options.paidAmount
+  }
+  if (typeof options?.changeAmount === 'number') {
+    order.changeAmount = options.changeAmount
   }
 
   if (newStatus === 'VERIFIED') {
@@ -317,7 +336,7 @@ export async function updateAdminOrderStatus(
   const isAdjusted = Boolean(options?.adjustmentNotes || options?.updatedItems)
   const actionType = newStatus === 'VERIFIED' ? 'ORDER_VERIFIED' : newStatus === 'REJECTED' ? 'ORDER_REJECTED' : 'ORDER_PENDING'
   const actionLabel = isAdjusted
-    ? 'Diterima dengan Penyesuaian Stok'
+    ? 'Diterima dengan Penyesuaian Stok (Tagihan Diterbitkan)'
     : newStatus === 'VERIFIED'
     ? 'Diverifikasi / Diterima'
     : newStatus === 'REJECTED'
@@ -339,6 +358,70 @@ export async function updateAdminOrderStatus(
       referenceCode: order.referenceCode,
       status: newStatus,
       isAdjusted,
+      paymentStatus: order.paymentStatus,
+      totalAmount: order.totalAmount,
+    },
+  })
+
+  return order
+}
+
+export async function markOrderAsPaid(
+  referenceCodeOrId: string,
+  options?: {
+    paymentMethod?: string
+    paidAmount?: number
+    adminUser?: string
+    notes?: string
+  }
+): Promise<AdminOrder | null> {
+  const orders = await getAdminOrders()
+  const order = orders.find((o) => o.id === referenceCodeOrId || o.referenceCode === referenceCodeOrId)
+  if (!order) return null
+
+  const adminUser = options?.adminUser || 'Admin'
+  const paymentMethod = options?.paymentMethod || order.paymentMethod || 'Transfer BCA'
+  const paidAmount = typeof options?.paidAmount === 'number' ? options.paidAmount : order.totalAmount
+  const notes = options?.notes || ''
+
+  order.paymentStatus = 'LUNAS'
+  order.paymentMethod = paymentMethod
+  order.paidAmount = paidAmount
+  order.changeAmount = Math.max(0, paidAmount - order.totalAmount)
+  order.statusNotes = notes ? `${notes} (Lunas via ${paymentMethod})` : `Pelunasan via ${paymentMethod}`
+
+  // If order was PENDING, auto verify on payment
+  if (order.status === 'PENDING') {
+    order.status = 'VERIFIED'
+    order.verifiedAt = new Date().toISOString()
+  }
+
+  try {
+    const { error } = await supabase
+      .from('hatoba_orders')
+      .update({
+        status: order.status,
+        data: order,
+      })
+      .eq('id', order.id)
+
+    if (error) {
+      console.warn('[admin-store] Supabase markOrderAsPaid error:', error.message)
+    }
+  } catch (err) {
+    console.warn('[admin-store] Supabase markOrderAsPaid exception:', (err as Error).message)
+  }
+
+  await recordActivityLog({
+    action: 'PAYMENT_RECEIVED',
+    title: 'Pelunasan Tagihan Diterima',
+    description: `Pesanan ${order.referenceCode} (${order.customerName}) telah LUNAS via ${paymentMethod} sebesar Rp ${paidAmount.toLocaleString('id-ID')}${notes ? ` (Catatan: "${notes}")` : ''}`,
+    adminUser,
+    metadata: {
+      referenceCode: order.referenceCode,
+      paymentStatus: 'LUNAS',
+      paymentMethod,
+      paidAmount,
       totalAmount: order.totalAmount,
     },
   })
